@@ -21,7 +21,5 @@ else
   exit 1
 fi
 
-# Start the API
-echo "Starting FastAPI server..."
-exec uvicorn src.api.main:app --host 0.0.0.0 --port 8000
-
+# Execute the command passed to the container
+exec "$@"

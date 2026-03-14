@@ -22,6 +22,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.api
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 #added the line 
     container_name: holiday_api
     ports:
       - "8000:8000"

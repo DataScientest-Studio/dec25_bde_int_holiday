@@ -35,12 +35,12 @@ cd /app\n\
 echo "============================================================"\n\
 echo "Running Batch ETL Pipeline..."\n\
 echo "============================================================"\n\
-python -m src.pipelines.batch_etl --limit-per-run 500 --max-pages 5 --since-hours 24\n\
+python3 -m src.pipelines.batch_etl --limit-per-run 500 --max-pages 5 --since-hours 24\n\
 echo ""\n\
 echo "============================================================"\n\
 echo "Running Graph Loader..."\n\
 echo "============================================================"\n\
-python -m src.pipelines.run_graph_load --batch-size 100\n\
+python3 -m src.pipelines.run_graph_load --batch-size 100\n\
 ' > /app/run_etl.sh && \
     chmod +x /app/run_etl.sh
 
