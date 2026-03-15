@@ -11,17 +11,14 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, text, or_, and_
 from typing import List, Optional, Dict, Any, Tuple
 from pydantic import BaseModel, Field
-from src.api.db import get_db, Base
+from src.api.db import get_db
 from src.api.models import POI
-from sqlalchemy import Column, String, Integer, DateTime, Text
 from src.analytics.analytics import (
     get_poi_counts_by_category,
     get_recent_pois,
     get_coordinates_list,
     get_counts_by_type,
-    get_counts_by_day,
-    get_bbox_count,
-    text_search_pois
+    get_counts_by_day
 )
 
 # Configure logging
@@ -134,7 +131,7 @@ async def root():
 async def health(db: Session = Depends(get_db)):
     """
     Health check endpoint with database connectivity check.
-    
+
     Returns:
         Health status with database connection status
     """
@@ -147,7 +144,7 @@ async def health(db: Session = Depends(get_db)):
         db_status = "disconnected"
         db_error = str(e)
         logger.error(f"Database health check failed: {traceback.format_exc()}")
-    
+
     health_status = {
         "status": "healthy" if db_status == "connected" else "unhealthy",
         "api": "operational",
@@ -156,7 +153,7 @@ async def health(db: Session = Depends(get_db)):
             "error": db_error
         }
     }
-    
+
     status_code = 200 if db_status == "connected" else 503
     if status_code != 200:
         raise HTTPException(status_code=status_code, detail=health_status)
@@ -173,13 +170,13 @@ async def get_pois(
 ):
     """
     Get POIs with pagination, filtering, and search.
-    
+
     Args:
         limit: Maximum number of results (default: 50)
         offset: Number of results to skip (default: 0)
         search: Search term for label/description (case-insensitive ILIKE)
         type: Filter by POI type (uses POI.type column)
-        
+
     Returns:
         Paginated response with items, total count, limit, and offset
     """
@@ -187,7 +184,7 @@ async def get_pois(
         # Build base queries for both count and data
         total_query = db.query(func.count(POI.id))
         query = db.query(POI)
-        
+
         # Apply search filter to both queries
         if search:
             search_pattern = f"%{search}%"
@@ -197,21 +194,21 @@ async def get_pois(
             )
             query = query.filter(filter_condition)
             total_query = total_query.filter(filter_condition)
-        
+
         # Apply type filter to both queries
         if type:
             query = query.filter(POI.type == type)
             total_query = total_query.filter(POI.type == type)
-        
+
         # Get total count (with filters applied)
         total = total_query.scalar() or 0
-        
+
         # Apply pagination and get items
         items = query.offset(offset).limit(limit).all()
-        
+
         # Convert ORM objects to Pydantic models
         items_response = [POIResponse.model_validate(p) for p in items]
-        
+
         return POIListResponse(
             items=items_response,
             total=total,
@@ -226,13 +223,13 @@ async def get_pois(
 def parse_bbox(bbox_str: str) -> Tuple[float, float, float, float]:
     """
     Parse bbox string in format "minLon,minLat,maxLon,maxLat".
-    
+
     Args:
         bbox_str: Bounding box string
-        
+
     Returns:
         Tuple of (min_lon, min_lat, max_lon, max_lat)
-        
+
     Raises:
         HTTPException: If bbox format is invalid
     """
@@ -241,7 +238,7 @@ def parse_bbox(bbox_str: str) -> Tuple[float, float, float, float]:
         if len(parts) != 4:
             raise ValueError("bbox must have exactly 4 values")
         min_lon, min_lat, max_lon, max_lat = map(float, parts)
-        
+
         # Validate bbox bounds
         if min_lon >= max_lon or min_lat >= max_lat:
             raise ValueError("Invalid bbox: min values must be less than max values")
@@ -249,7 +246,7 @@ def parse_bbox(bbox_str: str) -> Tuple[float, float, float, float]:
             raise ValueError("Longitude must be between -180 and 180")
         if not (-90 <= min_lat <= 90 and -90 <= max_lat <= 90):
             raise ValueError("Latitude must be between -90 and 90")
-            
+
         return min_lon, min_lat, max_lon, max_lat
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Invalid bbox format: {str(e)}. Expected format: 'minLon,minLat,maxLon,maxLat'")
@@ -266,16 +263,16 @@ async def get_pois_geojson(
 ) -> Dict[str, Any]:
     """
     Get POIs as GeoJSON FeatureCollection.
-    
+
     Only returns POIs with non-null latitude and longitude.
-    
+
     Query Parameters:
         limit: Maximum number of results (default: 1000, max: 5000)
         offset: Number of results to skip (default: 0)
         type: Filter by POI type (optional)
         search: Case-insensitive search on label or description (optional)
         bbox: Bounding box filter in format "minLon,minLat,maxLon,maxLat" (optional)
-        
+
     Returns:
         GeoJSON FeatureCollection with POI features. Each feature has:
         - geometry: Point with coordinates [longitude, latitude]
@@ -287,7 +284,7 @@ async def get_pois_geojson(
             POI.latitude.isnot(None),
             POI.longitude.isnot(None)
         )
-        
+
         # Apply search filter
         if search:
             search_pattern = f"%{search}%"
@@ -296,11 +293,11 @@ async def get_pois_geojson(
                 POI.description.ilike(search_pattern)
             )
             query = query.filter(filter_condition)
-        
+
         # Apply type filter
         if type:
             query = query.filter(POI.type == type)
-        
+
         # Apply bbox filter
         if bbox:
             min_lon, min_lat, max_lon, max_lat = parse_bbox(bbox)
@@ -312,13 +309,13 @@ async def get_pois_geojson(
                     POI.latitude <= max_lat
                 )
             )
-        
+
         # Get total count (before pagination)
-        total = query.count()
-        
+       # _total = query.count()
+
         # Apply pagination
         pois = query.offset(offset).limit(limit).all()
-        
+
         # Build GeoJSON FeatureCollection
         features = []
         for poi in pois:
@@ -340,14 +337,14 @@ async def get_pois_geojson(
                 }
             }
             features.append(feature)
-        
+
         geojson = {
             "type": "FeatureCollection",
             "features": features
         }
-        
+
         return geojson
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -359,13 +356,13 @@ async def get_pois_geojson(
 async def get_poi(poi_id: str, db: Session = Depends(get_db)):
     """
     Get a single POI by ID.
-    
+
     Args:
         poi_id: The unique identifier of the POI
-        
+
     Returns:
         POI data if found
-        
+
     Raises:
         404: If POI with given ID is not found
     """
@@ -379,7 +376,7 @@ async def get_poi(poi_id: str, db: Session = Depends(get_db)):
 async def get_stats(db: Session = Depends(get_db)):
     """
     Get comprehensive statistics about POIs.
-    
+
     Returns:
         - total_pois: Total number of POIs
         - pois_with_coordinates: Number of POIs with coordinates
@@ -389,12 +386,12 @@ async def get_stats(db: Session = Depends(get_db)):
     """
     try:
         total_pois = db.query(func.count(POI.id)).scalar() or 0
-        
+
         pois_with_coordinates = db.query(func.count(POI.id)).filter(
             POI.latitude.isnot(None),
             POI.longitude.isnot(None)
         ).scalar() or 0
-        
+
         # Count distinct types from POI.type column
         try:
             distinct_types = db.query(func.count(func.distinct(POI.type))).filter(
@@ -403,10 +400,10 @@ async def get_stats(db: Session = Depends(get_db)):
         except Exception as e:
             logger.warning(f"Error counting distinct types: {traceback.format_exc()}")
             distinct_types = 0
-        
+
         last_update_min = db.query(func.min(POI.last_update)).scalar()
         last_update_max = db.query(func.max(POI.last_update)).scalar()
-        
+
         return StatsResponse(
             total_pois=total_pois,
             pois_with_coordinates=pois_with_coordinates,
@@ -414,7 +411,7 @@ async def get_stats(db: Session = Depends(get_db)):
             last_update_min=last_update_min,
             last_update_max=last_update_max
         )
-    except Exception as e:
+    except Exception:
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -423,7 +420,7 @@ async def get_stats(db: Session = Depends(get_db)):
 async def get_stats_categories(db: Session = Depends(get_db)):
     """
     Get count of POIs grouped by category.
-    
+
     Returns a list of categories with their POI counts.
     """
     try:
@@ -438,10 +435,10 @@ async def get_stats_categories(db: Session = Depends(get_db)):
 async def get_pois_recent(limit: int = 20, db: Session = Depends(get_db)):
     """
     Get recent POIs ordered by last_update descending.
-    
+
     Args:
         limit: Maximum number of POIs to return (default: 20)
-        
+
     Returns:
         List of recent POI records ordered by last_update DESC
     """
@@ -457,10 +454,10 @@ async def get_pois_recent(limit: int = 20, db: Session = Depends(get_db)):
 async def get_stats_coordinates(limit: int = 1000, db: Session = Depends(get_db)):
     """
     Get list of latitude, longitude pairs for map visualization.
-    
+
     Args:
         limit: Maximum number of coordinates to return (default: 1000)
-        
+
     Returns:
         List of coordinate pairs for all POIs with valid coordinates.
     """
@@ -476,10 +473,10 @@ async def get_stats_coordinates(limit: int = 1000, db: Session = Depends(get_db)
 async def get_charts_types(limit: int = 15, db: Session = Depends(get_db)):
     """
     Get POI counts by type for chart visualization.
-    
+
     Args:
         limit: Maximum number of types to return (default: 15)
-        
+
     Returns:
         List of type counts ordered by count descending
     """
@@ -495,10 +492,10 @@ async def get_charts_types(limit: int = 15, db: Session = Depends(get_db)):
 async def get_charts_updates(days: int = 30, db: Session = Depends(get_db)):
     """
     Get POI counts by day based on last_update for chart visualization.
-    
+
     Args:
         days: Number of days to look back (default: 30)
-        
+
     Returns:
         List of day counts ordered by date descending
     """
@@ -514,30 +511,30 @@ async def get_charts_updates(days: int = 30, db: Session = Depends(get_db)):
 async def get_quality(db: Session = Depends(get_db)):
     """
     Get data quality metrics showing NULL counts for existing POI columns.
-    
+
     Dynamically inspects the POI model to detect existing columns and calculates
     NULL counts only for columns that actually exist in the database.
-    
+
     Returns:
         JSON dictionary with NULL counts per column.
         Example: {"label": 5, "description": 10, "latitude": 0, ...}
         Safely returns empty dict if any SQL error occurs.
     """
     null_counts: Dict[str, int] = {}
-    
+
     try:
         # Use SQLAlchemy inspection to get column metadata from the table
         # Get the table object from the model
         table = POI.__table__
-        
+
         # Define allowed columns that should exist in the database
         # This list matches the actual database schema (after migration)
         allowed_columns = {
-            "label", "description", "latitude", "longitude", 
+            "label", "description", "latitude", "longitude",
             "uri", "type", "city", "department_code",
             "last_update", "raw_json", "source_id", "created_at"
         }
-        
+
         # Get all columns from the table, excluding the primary key
         columns_to_check = []
         for column in table.columns:
@@ -545,41 +542,41 @@ async def get_quality(db: Session = Depends(get_db)):
             if column.primary_key:
                 logger.debug(f"Skipping primary key column: {column.name}")
                 continue
-            
+
             # Only include columns that are in the allowed list
             if column.name in allowed_columns:
                 columns_to_check.append(column)
                 logger.debug(f"Will check NULL counts for column: {column.name}")
             else:
                 logger.debug(f"Skipping column not in allowed list: {column.name}")
-        
+
         logger.info(f"Calculating NULL counts for {len(columns_to_check)} columns")
-        
+
         # Dynamically build queries for each column using SQLAlchemy
         for column in columns_to_check:
             column_name = column.name
             try:
                 # Get the column attribute from the POI model dynamically
                 column_attr = getattr(POI, column_name, None)
-                
+
                 if column_attr is None:
                     logger.warning(f"Column '{column_name}' attribute not found in POI model")
                     null_counts[column_name] = 0
                     continue
-                
+
                 # Build SQLAlchemy query to count NULL values
                 # This uses pure SQLAlchemy, not raw SQL
                 null_count = db.query(func.count(POI.id)).filter(
                     column_attr.is_(None)
                 ).scalar() or 0
-                
+
                 null_counts[column_name] = null_count
                 logger.debug(f"Column '{column_name}': {null_count} NULL values")
-                
+
             except AttributeError as e:
                 logger.warning(f"Column '{column_name}' not found in POI model: {e}")
                 null_counts[column_name] = 0
-            except Exception as e:
+            except Exception:
                 # Rollback transaction to prevent "current transaction is aborted" errors
                 try:
                     db.rollback()
@@ -587,11 +584,11 @@ async def get_quality(db: Session = Depends(get_db)):
                     logger.error(f"Error during rollback for column '{column_name}': {rollback_error}")
                 logger.error(f"Error counting NULL values for column '{column_name}': {traceback.format_exc()}")
                 null_counts[column_name] = 0
-        
+
         logger.info(f"Successfully calculated NULL counts for {len(null_counts)} columns")
         return null_counts
-        
-    except Exception as e:
+
+    except Exception:
         # Final safety net - rollback and return empty dict if anything unexpected happens
         try:
             db.rollback()
@@ -606,9 +603,9 @@ async def get_quality(db: Session = Depends(get_db)):
 async def get_etl_status(db: Session = Depends(get_db)):
     """
     Get the current ETL pipeline status (latest run).
-    
+
     Alias for /pipeline/last-run for consistency with requirements.
-    
+
     Returns:
         PipelineRunResponse with the latest run information
     """
@@ -619,34 +616,34 @@ async def get_etl_status(db: Session = Depends(get_db)):
 async def get_pipeline_last_run(db: Session = Depends(get_db)):
     """
     Get the latest pipeline run status and statistics.
-    
+
     Reads the most recent row from pipeline_runs table and returns:
     - Run metadata (run_id, started_at, finished_at, status)
     - Execution statistics (fetched_count, processed_count, inserted_count, updated_count, skipped_count)
     - Error message if the run failed
-    
+
     Returns:
         PipelineRunResponse with the latest run information
     """
     try:
         # Query the pipeline_runs table for the most recent run
         result = db.execute(text("""
-            SELECT run_id, started_at, finished_at, status, 
-                   fetched_count, processed_count, inserted_count, 
+            SELECT run_id, started_at, finished_at, status,
+                   fetched_count, processed_count, inserted_count,
                    updated_count, skipped_count, error_message
             FROM pipeline_runs
             ORDER BY started_at DESC
             LIMIT 1
         """))
-        
+
         row = result.fetchone()
-        
+
         if not row:
             raise HTTPException(
                 status_code=404,
                 detail="No pipeline runs found. Run the batch ETL pipeline first."
             )
-        
+
         return PipelineRunResponse(
             run_id=row[0],
             started_at=row[1],
@@ -659,7 +656,7 @@ async def get_pipeline_last_run(db: Session = Depends(get_db)):
             skipped_count=row[8] or 0,
             error_message=row[9]
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -684,14 +681,14 @@ class GraphSummaryResponse(BaseModel):
 async def get_graph_summary():
     """
     Get summary statistics from Neo4j graph database.
-    
+
     Returns counts of nodes and relationships:
     - POI nodes, Type nodes, City nodes, Department nodes
     - HAS_TYPE, IN_CITY, IN_DEPARTMENT relationships
-    
+
     Returns:
         GraphSummaryResponse with node and relationship counts
-        
+
     Raises:
         503: If Neo4j is unavailable
     """
@@ -731,17 +728,17 @@ async def sync_graph(
 ):
     """
     Manually trigger synchronization of POI data from PostgreSQL to Neo4j.
-    
+
     This endpoint loads all POIs from PostgreSQL into Neo4j, creating nodes and relationships.
     The operation is idempotent (safe to run multiple times).
-    
+
     Args:
         batch_size: Number of POIs to process in each batch (1-1000, default: 100)
         sync_token: Optional authentication token (set via GRAPH_SYNC_TOKEN env var)
-    
+
     Returns:
         GraphSyncResponse with sync results
-        
+
     Raises:
         401: If sync_token is required but not provided or invalid
         503: If Neo4j or PostgreSQL is unavailable
@@ -755,15 +752,15 @@ async def sync_graph(
                 status_code=401,
                 detail="Invalid or missing sync token. Set GRAPH_SYNC_TOKEN environment variable."
             )
-    
+
     try:
         from src.pipelines.graph_loader import load_pois_to_neo4j
-        
+
         logger.info(f"Starting graph sync with batch_size={batch_size}")
         pois_loaded, types_created, cities_created, depts_created = load_pois_to_neo4j(
             batch_size=batch_size
         )
-        
+
         return GraphSyncResponse(
             success=True,
             pois_loaded=pois_loaded,
@@ -772,7 +769,7 @@ async def sync_graph(
             departments_created=depts_created,
             message=f"Successfully synced {pois_loaded} POIs to Neo4j graph database."
         )
-    
+
     except ConnectionError as e:
         logger.error(f"Neo4j connection error during sync: {e}")
         raise HTTPException(
@@ -879,18 +876,18 @@ async def run_etl_now(
 ):
     """
     Manually trigger ETL pipeline execution.
-    
+
     This endpoint runs the batch ETL pipeline asynchronously in the background.
     Check /etl/status to monitor progress.
-    
+
     Args:
         limit_per_run: Maximum POIs to fetch in this run (1-5000, default: 500)
         max_pages: Maximum pages to fetch (1-50, default: 5)
         run_token: Optional authentication token (set via ETL_RUN_TOKEN env var)
-    
+
     Returns:
         ETLRunNowResponse with status message
-        
+
     Raises:
         401: If run_token is required but not provided or invalid
         500: If ETL execution fails
@@ -903,13 +900,12 @@ async def run_etl_now(
                 status_code=401,
                 detail="Invalid or missing run token. Set ETL_RUN_TOKEN environment variable."
             )
-    
+
     try:
         import asyncio
-        import subprocess
         import sys
         from pathlib import Path
-        
+
         # Run ETL pipeline in background using asyncio
         async def run_etl_background():
             project_root = Path(__file__).parent.parent.parent
@@ -923,16 +919,16 @@ async def run_etl_now(
             )
             # Don't wait for completion - return immediately
             return process
-        
+
         # Start background task
         process = await run_etl_background()
-        
+
         return ETLRunNowResponse(
             success=True,
             run_id=None,  # Will be created by ETL process
             message=f"ETL pipeline started in background. Check /etl/status for progress. PID: {process.pid}"
         )
-    
+
     except Exception as e:
         logger.error(f"Error starting ETL pipeline: {traceback.format_exc()}")
         raise HTTPException(
@@ -953,12 +949,12 @@ async def generate_itinerary(
 ):
     """
     Generate a day-by-day itinerary based on location, duration, and preferences.
-    
+
     Uses a greedy distance-based algorithm that:
     - Minimizes travel distance between POIs
     - Maximizes type diversity (prefers different POI types)
     - Limits POIs per day
-    
+
     Args:
         lat: Starting latitude (required)
         lon: Starting longitude (required)
@@ -966,21 +962,21 @@ async def generate_itinerary(
         radius_km: Search radius in kilometers (1-500, default: 50)
         types: Optional comma-separated list of POI types (e.g., "Museum,Restaurant")
         limit_per_day: Maximum POIs per day (1-20, default: 5)
-    
+
     Returns:
         ItineraryResponse with day-by-day POI lists
-        
+
     Example:
         GET /itinerary?lat=48.8566&lon=2.3522&days=3&radius_km=30&types=Museum,Restaurant&limit_per_day=4
     """
     try:
         from src.analytics.itinerary import generate_itinerary as generate_itinerary_algorithm
-        
+
         # Parse types if provided
         type_list = None
         if types:
             type_list = [t.strip() for t in types.split(",") if t.strip()]
-        
+
         # Generate itinerary
         itinerary = generate_itinerary_algorithm(
             db=db,
@@ -991,9 +987,9 @@ async def generate_itinerary(
             types=type_list,
             limit_per_day=limit_per_day
         )
-        
+
         return ItineraryResponse(**itinerary)
-    
+
     except Exception as e:
         logger.error(f"Error generating itinerary: {traceback.format_exc()}")
         raise HTTPException(
@@ -1009,15 +1005,15 @@ async def build_itinerary(
 ):
     """
     Build a day-by-day itinerary using HYBRID approach (PostgreSQL + Neo4j).
-    
+
     Uses PostgreSQL for geospatial queries and Neo4j for type diversity optimization.
-    
+
     Args:
         request: ItineraryBuildRequest with trip parameters
-        
+
     Returns:
         ItineraryBuildResponse with summary, days array, and data_sources
-        
+
     Example:
         POST /itinerary/build
         {
@@ -1031,47 +1027,47 @@ async def build_itinerary(
     """
     import time
     start_time = time.time()
-    
+
     try:
         from src.analytics.itinerary_hybrid import generate_itinerary_hybrid
-        
+
         # Validate inputs
         if not (-90 <= request.lat <= 90):
             raise HTTPException(
                 status_code=400,
                 detail="lat must be between -90 and 90"
             )
-        
+
         if not (-180 <= request.lon <= 180):
             raise HTTPException(
                 status_code=400,
                 detail="lon must be between -180 and 180"
             )
-        
+
         if request.days < 1 or request.days > 14:
             raise HTTPException(
                 status_code=400,
                 detail="days must be between 1 and 14"
             )
-        
+
         if request.radius_km < 1 or request.radius_km > 50:
             raise HTTPException(
                 status_code=400,
                 detail="radius_km must be between 1 and 50"
             )
-        
+
         if request.max_pois_per_day < 1 or request.max_pois_per_day > 10:
             raise HTTPException(
                 status_code=400,
                 detail="max_pois_per_day must be between 1 and 10"
             )
-        
+
         logger.info(
             f"Itinerary build request: lat={request.lat}, lon={request.lon}, "
             f"days={request.days}, radius_km={request.radius_km}, "
             f"types={request.types}, max_pois_per_day={request.max_pois_per_day}"
         )
-        
+
         # Generate itinerary using hybrid approach
         db_query_start = time.time()
         result = generate_itinerary_hybrid(
@@ -1085,18 +1081,18 @@ async def build_itinerary(
             diversity=True  # Always use diversity mode for hybrid approach
         )
         db_query_time = time.time() - db_query_start
-        
+
         logger.info(
             f"Itinerary generated: {result.get('total_pois_selected', 0)} POIs selected "
             f"from {result.get('total_pois_found', 0)} candidates in {db_query_time:.2f}s"
         )
-        
+
         # Transform result to match exact specification
         days_response = []
         for day_data in result.get("itinerary", []):
             day_num = day_data.get("day", 1)
             items = day_data.get("items", [])
-            
+
             # Convert items to specification format
             pois = []
             for item in items:
@@ -1108,7 +1104,7 @@ async def build_itinerary(
                     lon=item.get("longitude", 0.0),
                     uri=item.get("uri")
                 ))
-            
+
             # Generate route hint
             types_visited = day_data.get("types_visited", [])
             route_hint = f"Visit {len(pois)} POI(s)"
@@ -1116,13 +1112,13 @@ async def build_itinerary(
                 route_hint += f" including {', '.join(types_visited[:3])}"
             if len(types_visited) > 3:
                 route_hint += f" and {len(types_visited) - 3} more type(s)"
-            
+
             days_response.append(ItineraryDay(
                 day=day_num,
                 pois=pois,
                 route_hint=route_hint
             ))
-        
+
         # Build summary
         summary = {
             "start_location": {"lat": request.lat, "lon": request.lon},
@@ -1134,23 +1130,23 @@ async def build_itinerary(
             "total_pois_selected": result.get("total_pois_selected", 0),
             "query_time_seconds": round(db_query_time, 3)
         }
-        
+
         # Build data_sources
         meta = result.get("meta", {})
         data_sources = {
             "postgres": True,  # Always used for geospatial queries
             "neo4j": meta.get("neo4j_used", False)
         }
-        
+
         total_time = time.time() - start_time
         logger.info(f"Itinerary build completed in {total_time:.2f}s (DB query: {db_query_time:.2f}s)")
-        
+
         return ItineraryBuildResponse(
             summary=summary,
             days=days_response,
             data_sources=data_sources
         )
-    
+
     except HTTPException:
         raise
     except ValueError as e:
@@ -1171,16 +1167,16 @@ async def build_itinerary(
 async def itinerary_health(db: Session = Depends(get_db)):
     """
     Health check endpoint for itinerary generation.
-    
+
     Returns counts from PostgreSQL and Neo4j relevant to itinerary generation.
-    
+
     Returns:
         ItineraryHealthResponse with POI and type counts from both databases
     """
     try:
         # PostgreSQL counts
         postgres_result = db.execute(text("""
-            SELECT 
+            SELECT
                 COUNT(DISTINCT id) as pois,
                 COUNT(DISTINCT type) as types
             FROM poi
@@ -1189,12 +1185,12 @@ async def itinerary_health(db: Session = Depends(get_db)):
         postgres_row = postgres_result.fetchone()
         postgres_pois = postgres_row[0] if postgres_row else 0
         postgres_types = postgres_row[1] if postgres_row else 0
-        
+
         # Neo4j counts
         neo4j_available = False
         neo4j_pois = 0
         neo4j_types = 0
-        
+
         try:
             from src.pipelines.graph_loader import get_neo4j_driver
             driver = get_neo4j_driver()
@@ -1208,7 +1204,7 @@ async def itinerary_health(db: Session = Depends(get_db)):
                     except Exception as e:
                         logger.warning(f"Error counting POI nodes: {e}")
                         neo4j_pois = 0
-                    
+
                     try:
                         type_result = session.run("MATCH (t:Type) RETURN count(t) as count")
                         type_record = type_result.single()
@@ -1216,11 +1212,11 @@ async def itinerary_health(db: Session = Depends(get_db)):
                     except Exception as e:
                         logger.warning(f"Error counting Type nodes: {e}")
                         neo4j_types = 0
-                
+
                 driver.close()
         except Exception as e:
             logger.warning(f"Neo4j health check failed: {e}")
-        
+
         return ItineraryHealthResponse(
             postgres_pois=postgres_pois,
             postgres_types=postgres_types,
@@ -1228,11 +1224,10 @@ async def itinerary_health(db: Session = Depends(get_db)):
             neo4j_types=neo4j_types,
             neo4j_available=neo4j_available
         )
-    
+
     except Exception as e:
         logger.error(f"Error in itinerary health check: {traceback.format_exc()}")
         raise HTTPException(
             status_code=500,
             detail=f"Health check failed: {str(e)}"
         )
-

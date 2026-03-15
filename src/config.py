@@ -43,4 +43,3 @@ API_BASE_URL = os.getenv("API_BASE_URL", "")
 # Create directories if they don't exist
 RAW_DATA_DIR.mkdir(parents=True, exist_ok=True)
 PROCESSED_DATA_DIR.mkdir(parents=True, exist_ok=True)
-

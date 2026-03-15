@@ -11,7 +11,6 @@ import folium
 from folium.plugins import MarkerCluster
 from streamlit_folium import st_folium
 from typing import Optional, Dict, Any, List
-from functools import lru_cache
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -83,7 +82,7 @@ def fetch_quality() -> Optional[Dict[str, Any]]:
         return None
 
 
-def fetch_pois(limit: int = 100, offset: int = 0, type_filter: Optional[str] = None, 
+def fetch_pois(limit: int = 100, offset: int = 0, type_filter: Optional[str] = None,
                search: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Fetch POIs from /pois endpoint with filters."""
     try:
@@ -92,7 +91,7 @@ def fetch_pois(limit: int = 100, offset: int = 0, type_filter: Optional[str] = N
             params["type"] = type_filter
         if search:
             params["search"] = search
-        
+
         response = requests.get(f"{API_BASE_URL}/pois", params=params, timeout=10)
         response.raise_for_status()
         return response.json()
@@ -143,7 +142,7 @@ def fetch_geojson(
             params["search"] = search
         if bbox:
             params["bbox"] = bbox
-        
+
         response = requests.get(f"{API_BASE_URL}/pois/geojson", params=params, timeout=10)
         response.raise_for_status()
         return response.json()
@@ -167,7 +166,7 @@ def fetch_categories() -> Optional[List[Dict[str, Any]]]:
 def fetch_graph_summary() -> Optional[Dict[str, Any]]:
     """Fetch graph summary from /graph/summary endpoint."""
     try:
-        response = requests.get(f"{API_BASE_URL}/graph/summary", timeout=5)
+        response = requests.get(f"{API_BASE_URL}/graph/summary", timeout=30)
         response.raise_for_status()
         return response.json()
     except requests.exceptions.HTTPError as e:
@@ -228,22 +227,22 @@ else:
 # Overview Page
 if page == "Overview":
     st.title("📊 Overview - Key Performance Indicators")
-    
+
     # Debug info
     with st.expander("🔧 Debug Info", expanded=False):
         st.write(f"**API Base URL:** {API_BASE_URL}")
         st.write(f"**Docker Environment:** {os.getenv('DOCKER_ENV', 'Not set')}")
-        
+
         # Test API connection
         try:
             test_response = requests.get(f"{API_BASE_URL}/", timeout=2)
             st.success(f"✅ API is reachable (Status: {test_response.status_code})")
         except Exception as e:
             st.error(f"❌ API connection test failed: {str(e)}")
-    
+
     with st.spinner("Loading statistics..."):
         stats = fetch_stats()
-    
+
     # Check if stats is None (error) vs empty dict (no data)
     if stats is None:
         st.warning("⚠️ No statistics data available.")
@@ -255,7 +254,7 @@ if page == "Overview":
         4. Verify API_BASE_URL is correct: {API_BASE_URL}
         5. Try manually calling: {API_BASE_URL}/stats in your browser
         """)
-        
+
         # Try to fetch raw response for debugging
         try:
             raw_response = requests.get(f"{API_BASE_URL}/stats", timeout=10)
@@ -264,48 +263,48 @@ if page == "Overview":
                 st.json(raw_response.json() if raw_response.status_code == 200 else raw_response.text)
         except Exception as e:
             st.error(f"Failed to fetch raw response: {str(e)}")
-        
+
         st.stop()
-    
+
     # Display KPIs
     st.header("Key Metrics")
     col1, col2, col3, col4 = st.columns(4)
-    
+
     total_pois = stats.get("total_pois", 0)
     pois_with_coords = stats.get("pois_with_coordinates", 0)
     distinct_types = stats.get("distinct_types", 0)
-    
+
     with col1:
         st.metric("Total POIs", total_pois)
-    
+
     with col2:
         st.metric("With Coordinates", pois_with_coords)
-    
+
     with col3:
         st.metric("Distinct Types", distinct_types)
-    
+
     with col4:
         last_update = stats.get("last_update_max")
         if last_update:
             st.metric("Latest Update", pd.to_datetime(last_update).strftime("%Y-%m-%d"))
         else:
             st.metric("Latest Update", "N/A")
-    
+
     # Show warning if all metrics are zero
     if total_pois == 0 and pois_with_coords == 0 and distinct_types == 0:
         st.warning("⚠️ All metrics are zero. The database may be empty. Run the ETL pipeline to load data.")
-    
+
     # Additional info
     st.header("Update Range")
     col1, col2 = st.columns(2)
-    
+
     with col1:
         min_update = stats.get("last_update_min")
         if min_update:
             st.info(f"**Earliest:** {pd.to_datetime(min_update).strftime('%Y-%m-%d %H:%M:%S')}")
         else:
             st.info("**Earliest:** N/A")
-    
+
     with col2:
         max_update = stats.get("last_update_max")
         if max_update:
@@ -316,17 +315,17 @@ if page == "Overview":
 # Types Chart Page
 elif page == "Types Chart":
     st.title("📈 POI Counts by Type")
-    
+
     limit = st.sidebar.slider("Number of types to show", 5, 50, 15)
-    
+
     with st.spinner("Loading type counts..."):
         type_data = fetch_types_chart(limit=limit)
-    
+
     if type_data:
         df = pd.DataFrame(type_data)
         if not df.empty:
             st.bar_chart(df.set_index("type"))
-            
+
             st.header("Data Table")
             st.dataframe(df, width='stretch', hide_index=True)
         else:
@@ -337,20 +336,20 @@ elif page == "Types Chart":
 # Updates Chart Page
 elif page == "Updates Chart":
     st.title("📅 POI Updates Over Time")
-    
+
     days = st.sidebar.slider("Number of days", 7, 90, 30)
-    
+
     with st.spinner("Loading update counts..."):
         update_data = fetch_updates_chart(days=days)
-    
+
     if update_data:
         df = pd.DataFrame(update_data)
         if not df.empty:
             df["date"] = pd.to_datetime(df["date"])
             df = df.sort_values("date")
-            
+
             st.line_chart(df.set_index("date"))
-            
+
             st.header("Data Table")
             st.dataframe(df, width='stretch', hide_index=True)
         else:
@@ -362,10 +361,10 @@ elif page == "Updates Chart":
 elif page == "Data Quality":
     st.title("🔍 Data Quality Metrics")
     st.markdown("Missing/null fields analysis")
-    
+
     with st.spinner("Loading quality metrics..."):
         quality = fetch_quality()
-    
+
     if quality:
         # Quality endpoint returns a dict of {column_name: null_count}
         # Dynamically create DataFrame from whatever columns are returned
@@ -376,18 +375,18 @@ elif page == "Data Quality":
                 for field_name, count in quality.items()
             ]
             df = pd.DataFrame(quality_list)
-            
+
             if not df.empty:
                 st.header("Missing Fields Summary")
                 st.bar_chart(df.set_index("Field"))
-                
+
                 st.header("Data Table")
                 st.dataframe(df, width='stretch', hide_index=True)
-                
+
                 # Calculate total POIs for percentage
                 stats = fetch_stats()
                 total = stats.get("total_pois", 1) if stats else 1
-                
+
                 if total > 0:
                     st.header("Completeness Percentage")
                     df_pct = df.copy()
@@ -404,20 +403,20 @@ elif page == "Data Quality":
 elif page == "POI Explorer":
     st.title("🔎 POI Explorer")
     st.markdown("Browse and search POIs with filters and pagination")
-    
+
     # Filters in sidebar
     st.sidebar.header("Filters")
     search_term = st.sidebar.text_input("Search (label/description)", "")
     type_filter = st.sidebar.text_input("Filter by type", "")
-    
+
     # Pagination
     st.sidebar.header("Pagination")
     page_size = st.sidebar.selectbox("Items per page", [25, 50, 100, 200], index=1)
-    
+
     # Get current page from session state
     if "poi_page" not in st.session_state:
         st.session_state.poi_page = 0
-    
+
     col1, col2, col3 = st.sidebar.columns(3)
     with col1:
         if st.button("◀ Prev"):
@@ -428,9 +427,9 @@ elif page == "POI Explorer":
     with col3:
         if st.button("Next ▶"):
             st.session_state.poi_page += 1
-    
+
     offset = st.session_state.poi_page * page_size
-    
+
     # Fetch POIs
     with st.spinner("Loading POIs..."):
         poi_data = fetch_pois(
@@ -439,27 +438,27 @@ elif page == "POI Explorer":
             type_filter=type_filter if type_filter else None,
             search=search_term if search_term else None
         )
-    
+
     if poi_data:
         items = poi_data.get("items", [])
         total = poi_data.get("total", 0)
-        
+
         st.info(f"Showing {len(items)} of {total} POIs")
-        
+
         if items:
             df = pd.DataFrame(items)
-            
+
             # Format datetime columns
             for col in ["last_update", "created_at"]:
                 if col in df.columns:
                     df[col] = pd.to_datetime(df[col], errors='coerce').dt.strftime("%Y-%m-%d %H:%M:%S")
-            
+
             # Select display columns
             display_cols = ["id", "label", "type", "city", "latitude", "longitude", "last_update"]
             available_cols = [col for col in display_cols if col in df.columns]
-            
+
             st.dataframe(df[available_cols], width='stretch', hide_index=True)
-            
+
             # Reset page if needed
             max_pages = (total + page_size - 1) // page_size
             if st.session_state.poi_page >= max_pages:
@@ -473,34 +472,34 @@ elif page == "POI Explorer":
 elif page == "Map Explorer":
     st.title("🗺️ Map Explorer")
     st.markdown("Interactive map visualization of POIs")
-    
+
     # Sidebar filters
     st.sidebar.header("Map Filters")
-    
+
     # Fetch categories for type dropdown
     categories_data = fetch_categories()
     type_options = ["All"] + ([cat["category"] for cat in categories_data] if categories_data else [])
     selected_type = st.sidebar.selectbox("Filter by Type", type_options, index=0)
-    
+
     search_input = st.sidebar.text_input("Search (label/description)", "")
-    
+
     limit_slider = st.sidebar.slider("Max Items", 100, 5000, 1000, step=100)
-    
+
     cluster_markers = st.sidebar.toggle("Cluster Markers", value=True)
-    
+
     # Map bounds filter button
     st.sidebar.header("Map Bounds Filter")
     filter_by_bounds = st.sidebar.button("Filter by visible map")
-    
+
     # Initialize session state for map bounds
     if "current_bbox" not in st.session_state:
         st.session_state.current_bbox = None
-    
+
     # Prepare filters
     type_filter = None if selected_type == "All" else selected_type
     search_filter = search_input if search_input else None
     bbox_filter = st.session_state.current_bbox if filter_by_bounds and st.session_state.current_bbox else None
-    
+
     # Fetch GeoJSON data
     with st.spinner("Loading POIs on map..."):
         geojson_data = fetch_geojson(
@@ -510,67 +509,67 @@ elif page == "Map Explorer":
             search=search_filter,
             bbox=bbox_filter
         )
-    
+
     if geojson_data:
         features = geojson_data.get("features", [])
-        
+
         if features:
             # Calculate KPI metrics
             total_items = len(features)
             distinct_types = len(set(
-                f.get("properties", {}).get("type") 
-                for f in features 
+                f.get("properties", {}).get("type")
+                for f in features
                 if f.get("properties", {}).get("type")
             ))
-            
+
             # Display KPIs
             col1, col2 = st.columns(2)
             with col1:
                 st.metric("Total Items Shown", total_items)
             with col2:
                 st.metric("Distinct Types", distinct_types)
-            
+
             # Calculate map center and bounds from data
             lats = [f["geometry"]["coordinates"][1] for f in features]
             lons = [f["geometry"]["coordinates"][0] for f in features]
-            
+
             if lats and lons:
                 center_lat = sum(lats) / len(lats)
                 center_lon = sum(lons) / len(lons)
-                
+
                 # Create map
                 m = folium.Map(
                     location=[center_lat, center_lon],
                     zoom_start=6,
                     tiles="OpenStreetMap"
                 )
-                
+
                 # Add markers
                 if cluster_markers:
                     marker_cluster = MarkerCluster().add_to(m)
                     marker_group = marker_cluster
                 else:
                     marker_group = m
-                
+
                 for feature in features:
                     coords = feature["geometry"]["coordinates"]
                     lon, lat = coords[0], coords[1]
                     props = feature.get("properties", {})
-                    
+
                     # Safe text field extraction with null handling
                     safe_label = (props.get("label") or "").strip()
                     safe_desc = (props.get("description") or "").strip()
                     safe_type = (props.get("type") or "N/A").strip()
                     safe_uri = (props.get("uri") or "").strip()
                     safe_last_update = props.get("last_update") or "N/A"
-                    
+
                     # Fallback if both label and description are empty
                     if not safe_label and not safe_desc:
                         safe_label = "No description available"
-                    
+
                     # Truncate description safely
                     desc_truncated = (safe_desc[:200] + "…") if len(safe_desc) > 200 else safe_desc
-                    
+
                     # Format popup HTML with safe variables
                     popup_html = f"""
                     <div style="width: 250px;">
@@ -581,37 +580,37 @@ elif page == "Map Explorer":
                         {f'<p style="margin: 5px 0;"><a href="{safe_uri}" target="_blank">View Details</a></p>' if safe_uri else ''}
                     </div>
                     """
-                    
+
                     popup = folium.Popup(popup_html, max_width=300)
                     folium.Marker(
                         location=[lat, lon],
                         popup=popup,
                         tooltip=safe_label or "POI"
                     ).add_to(marker_group)
-                
+
                 # Display map and get bounds
                 map_data = st_folium(m, width='stretch', height=600, returned_objects=["bounds"])
-                
+
                 # Store current map bounds in session state
                 if map_data.get("bounds"):
                     bounds = map_data["bounds"]
                     if bounds:
                         south_west = bounds.get("_southWest", {})
                         north_east = bounds.get("_northEast", {})
-                        
+
                         if south_west and north_east:
                             min_lon = south_west.get("lng")
                             min_lat = south_west.get("lat")
                             max_lon = north_east.get("lng")
                             max_lat = north_east.get("lat")
-                            
+
                             if all(x is not None for x in [min_lon, min_lat, max_lon, max_lat]):
                                 st.session_state.current_bbox = f"{min_lon},{min_lat},{max_lon},{max_lat}"
-                
+
                 # Handle map bounds filter button click
                 if filter_by_bounds and st.session_state.current_bbox:
                     bbox_str = st.session_state.current_bbox
-                    
+
                     # Fetch filtered data
                     with st.spinner("Filtering by map bounds..."):
                         filtered_geojson = fetch_geojson(
@@ -621,11 +620,11 @@ elif page == "Map Explorer":
                             search=search_filter,
                             bbox=bbox_str
                         )
-                    
+
                     if filtered_geojson:
                         filtered_features = filtered_geojson.get("features", [])
                         st.success(f"✅ Showing {len(filtered_features)} POIs within visible map area")
-                        
+
                         # Recalculate center for filtered data
                         if filtered_features:
                             filtered_lats = [f["geometry"]["coordinates"][1] for f in filtered_features]
@@ -635,39 +634,39 @@ elif page == "Map Explorer":
                         else:
                             filtered_center_lat = center_lat
                             filtered_center_lon = center_lon
-                        
+
                         # Update map with filtered data
                         m_filtered = folium.Map(
                             location=[filtered_center_lat, filtered_center_lon],
                             zoom_start=8,
                             tiles="OpenStreetMap"
                         )
-                        
+
                         if cluster_markers:
                             marker_cluster_filtered = MarkerCluster().add_to(m_filtered)
                             marker_group_filtered = marker_cluster_filtered
                         else:
                             marker_group_filtered = m_filtered
-                        
+
                         for feature in filtered_features:
                             coords = feature["geometry"]["coordinates"]
                             lon, lat = coords[0], coords[1]
                             props = feature.get("properties", {})
-                            
+
                             # Safe text field extraction with null handling
                             safe_label = (props.get("label") or "").strip()
                             safe_desc = (props.get("description") or "").strip()
                             safe_type = (props.get("type") or "N/A").strip()
                             safe_uri = (props.get("uri") or "").strip()
                             safe_last_update = props.get("last_update") or "N/A"
-                            
+
                             # Fallback if both label and description are empty
                             if not safe_label and not safe_desc:
                                 safe_label = "No description available"
-                            
+
                             # Truncate description safely
                             desc_truncated = (safe_desc[:200] + "…") if len(safe_desc) > 200 else safe_desc
-                            
+
                             # Format popup HTML with safe variables
                             popup_html = f"""
                             <div style="width: 250px;">
@@ -678,14 +677,14 @@ elif page == "Map Explorer":
                                 {f'<p style="margin: 5px 0;"><a href="{safe_uri}" target="_blank">View Details</a></p>' if safe_uri else ''}
                             </div>
                             """
-                            
+
                             popup = folium.Popup(popup_html, max_width=300)
                             folium.Marker(
                                 location=[lat, lon],
                                 popup=popup,
                                 tooltip=safe_label or "POI"
                             ).add_to(marker_group_filtered)
-                        
+
                         st_folium(m_filtered, width='stretch', height=600)
             else:
                 st.warning("No valid coordinates found in GeoJSON data.")
@@ -697,7 +696,7 @@ elif page == "Map Explorer":
         - API server is running
         - Database connection is healthy
         - GeoJSON endpoint `/pois/geojson` is accessible
-        
+
         The dashboard will continue to function, but the map cannot be displayed.
         """)
 
@@ -705,7 +704,7 @@ elif page == "Map Explorer":
 elif page == "Itinerary Builder":
     st.title("🗺️ Itinerary Builder")
     st.markdown("Generate a personalized day-by-day itinerary using **HYBRID approach** (PostgreSQL + Neo4j).")
-    
+
     # Health check
     try:
         health_response = requests.get(f"{API_BASE_URL}/itinerary/health", timeout=5)
@@ -721,7 +720,7 @@ elif page == "Itinerary Builder":
                 st.metric("Neo4j Status", neo4j_status)
     except Exception:
         pass
-    
+
     # Form inputs
     st.header("📍 Starting Location")
     col1, col2 = st.columns(2)
@@ -745,7 +744,7 @@ elif page == "Itinerary Builder":
             format="%.4f",
             help="Starting longitude (e.g., 2.3522 for Paris)"
         )
-    
+
     st.header("📅 Trip Details")
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -773,9 +772,9 @@ elif page == "Itinerary Builder":
             value=5,
             help="Maximum number of POIs per day (default: 5)"
         )
-    
+
     st.header("🎯 Preferences")
-    
+
     # Multi-select POI types
     try:
         categories = fetch_categories()
@@ -801,7 +800,7 @@ elif page == "Itinerary Builder":
             help="Filter by specific POI types. Leave empty to include all types."
         )
         selected_types = [t.strip() for t in types_input.split(",") if t.strip()] if types_input else []
-    
+
     # Explanation text
     st.info("""
     **Selection Logic:** The hybrid approach uses:
@@ -809,13 +808,13 @@ elif page == "Itinerary Builder":
     - **Neo4j**: Optimizes type diversity across days using graph relationships (POI)-[:HAS_TYPE]->(Type)
     - **Scoring**: `score = distance_weight * (1 / (1 + distance_km)) + type_diversity_bonus`
     """)
-    
+
     # Initialize session state for itinerary results
     if "itinerary_result" not in st.session_state:
         st.session_state.itinerary_result = None
     if "itinerary_error" not in st.session_state:
         st.session_state.itinerary_error = None
-    
+
     # Use form to prevent automatic rerun
     with st.form("itinerary_form", clear_on_submit=False):
         # Generate button inside form
@@ -829,11 +828,11 @@ elif page == "Itinerary Builder":
                     st.session_state.itinerary_result = None
                     st.session_state.itinerary_error = None
                     st.rerun()
-    
+
     # Generate itinerary when form is submitted
     if submitted:
         st.session_state.itinerary_error = None
-        
+
         with st.spinner("⏳ Generating itinerary using HYBRID approach... Please wait."):
             try:
                 # Prepare request payload (matching exact specification)
@@ -846,9 +845,9 @@ elif page == "Itinerary Builder":
                 }
                 if selected_types:
                     payload["types"] = selected_types
-                
+
                 logger.info(f"Calling API: {API_BASE_URL}/itinerary/build with payload: {payload}")
-                
+
                 # Call POST endpoint
                 response = requests.post(
                     f"{API_BASE_URL}/itinerary/build",
@@ -856,27 +855,27 @@ elif page == "Itinerary Builder":
                     timeout=30
                 )
                 logger.info(f"API Response Status: {response.status_code}")
-                
+
                 response.raise_for_status()
                 result = response.json()
                 logger.info(f"API Response: {result}")
-                
+
                 # Save result to session state
                 st.session_state.itinerary_result = result
                 st.session_state.itinerary_error = None
-                
+
                 # Force rerun to show results
                 st.rerun()
-            
+
             except requests.exceptions.HTTPError as e:
                 error_detail = ""
                 try:
                     error_detail = e.response.json().get("detail", str(e))
                     logger.error(f"HTTP Error: {error_detail}")
-                except:
+                except Exception:
                     error_detail = str(e)
                     logger.error(f"HTTP Error (no JSON): {error_detail}")
-                
+
                 st.session_state.itinerary_error = {
                     "message": f"Error generating itinerary: {error_detail}",
                     "status_code": e.response.status_code if hasattr(e, 'response') else None
@@ -889,7 +888,7 @@ elif page == "Itinerary Builder":
                     "status_code": None
                 }
                 st.rerun()
-    
+
     # Display error if any (persists across reruns)
     if st.session_state.itinerary_error:
         error = st.session_state.itinerary_error
@@ -900,27 +899,27 @@ elif page == "Itinerary Builder":
             st.error("Server error. Please check the API logs.")
         else:
             st.info("Make sure the API is running and accessible.")
-    
+
     # Display results if available (persists across reruns)
     if st.session_state.itinerary_result:
         result = st.session_state.itinerary_result
-        
+
         # Extract data from new format
         summary = result.get("summary", {})
         days_data = result.get("days", [])
         data_sources = result.get("data_sources", {})
-        
+
         # Display results
         total_pois = sum(len(day.get("pois", [])) for day in days_data)
         st.success(f"✅ Generated itinerary with {total_pois} POIs across {len(days_data)} days!")
-        
+
         # Show data sources
         st.info(f"""
         **Data Sources Used:**
         - PostgreSQL: {'✅' if data_sources.get('postgres') else '❌'}
         - Neo4j: {'✅' if data_sources.get('neo4j') else '❌'}
         """)
-        
+
         # Summary metrics
         st.header("📊 Itinerary Summary")
         col1, col2, col3, col4 = st.columns(4)
@@ -932,7 +931,7 @@ elif page == "Itinerary Builder":
             st.metric("POIs Found", summary.get("total_pois_found", 0))
         with col4:
             st.metric("Query Time", f"{summary.get('query_time_seconds', 0):.2f}s")
-        
+
         # Map
         st.header("🗺️ Itinerary Map")
         if days_data:
@@ -940,27 +939,27 @@ elif page == "Itinerary Builder":
             start_loc = summary.get("start_location", {})
             map_lat = start_loc.get("lat", start_lat)
             map_lon = start_loc.get("lon", start_lon)
-            
+
             m = folium.Map(
                 location=[map_lat, map_lon],
                 zoom_start=12,
                 tiles='OpenStreetMap'
             )
-            
+
             # Add start marker
             folium.Marker(
                 [map_lat, map_lon],
                 popup="Start Location",
                 icon=folium.Icon(color='green', icon='home', prefix='fa')
             ).add_to(m)
-            
+
             # Add POIs for each day with different colors
             colors = ['red', 'blue', 'purple', 'orange', 'darkred', 'lightred', 'beige', 'darkblue', 'darkgreen', 'cadetblue']
-            
+
             for day_info in days_data:
                 day_num = day_info.get("day", 1)
                 color = colors[(day_num - 1) % len(colors)]
-                
+
                 pois = day_info.get("pois", [])
                 for poi in pois:
                     folium.Marker(
@@ -969,10 +968,10 @@ elif page == "Itinerary Builder":
                         tooltip=f"Day {day_num}: {poi.get('label', poi['id'])}",
                         icon=folium.Icon(color=color, icon='map-marker', prefix='fa')
                     ).add_to(m)
-            
+
             # Display map
             st_folium(m, width=1200, height=600)
-        
+
         # Day-by-day itinerary table
         st.header("📅 Day-by-Day Itinerary")
         if days_data:
@@ -982,7 +981,7 @@ elif page == "Itinerary Builder":
                 day_num = day_info.get("day", 1)
                 pois = day_info.get("pois", [])
                 route_hint = day_info.get("route_hint", "")
-                
+
                 for idx, poi in enumerate(pois, 1):
                     table_data.append({
                         "Day": day_num,
@@ -993,11 +992,11 @@ elif page == "Itinerary Builder":
                         "Longitude": f"{poi.get('lon', 0):.4f}",
                         "Route Hint": route_hint if idx == 1 else ""
                     })
-            
+
             if table_data:
                 df = pd.DataFrame(table_data)
                 st.dataframe(df, width='stretch', hide_index=True)
-            
+
             # Detailed view with day selector
             st.subheader("Detailed View")
             selected_day = st.selectbox(
@@ -1006,12 +1005,12 @@ elif page == "Itinerary Builder":
                 index=0
             )
             selected_day_num = int(selected_day.split()[1])
-            
+
             for day_info in days_data:
                 if day_info.get("day") == selected_day_num:
                     st.markdown(f"### Day {day_info['day']}")
                     st.caption(day_info.get("route_hint", ""))
-                    
+
                     pois = day_info.get("pois", [])
                     for idx, poi in enumerate(pois, 1):
                         col1, col2 = st.columns([3, 1])
@@ -1030,77 +1029,77 @@ elif page == "Itinerary Builder":
 elif page == "Graph":
     st.title("🕸️ Graph Database (Neo4j)")
     st.markdown("Neo4j graph database statistics and model information")
-    
+
     with st.spinner("Loading graph summary..."):
         graph_summary = fetch_graph_summary()
-    
+
     if graph_summary:
         st.header("Graph Statistics")
-        
+
         # Display metrics in columns
         col1, col2, col3, col4 = st.columns(4)
-        
+
         with col1:
             st.metric("POI Nodes", graph_summary.get("poi_nodes", 0))
-        
+
         with col2:
             st.metric("Type Nodes", graph_summary.get("type_nodes", 0))
-        
+
         with col3:
             st.metric("City Nodes", graph_summary.get("city_nodes", 0))
-        
+
         with col4:
             st.metric("Department Nodes", graph_summary.get("department_nodes", 0))
-        
+
         # Relationship metrics
         st.header("Relationships")
         col1, col2, col3 = st.columns(3)
-        
+
         with col1:
             st.metric("HAS_TYPE", graph_summary.get("has_type_relationships", 0))
-        
+
         with col2:
             st.metric("IN_CITY", graph_summary.get("in_city_relationships", 0))
-        
+
         with col3:
             st.metric("IN_DEPARTMENT", graph_summary.get("in_department_relationships", 0))
-        
+
         # Totals
         st.header("Totals")
         col1, col2 = st.columns(2)
-        
+
         with col1:
             st.metric("Total Nodes", graph_summary.get("total_nodes", 0))
-        
+
         with col2:
             st.metric("Total Relationships", graph_summary.get("total_relationships", 0))
-        
+
         # Graph Model Explanation
         st.header("Graph Model")
         st.info("""
         The Neo4j graph database models POI data with the following structure:
-        
+
         **Nodes:**
         - `POI`: Points of Interest with properties (id, label, type, latitude, longitude, uri, last_update)
         - `Type`: POI types (e.g., Museum, Restaurant, Hotel)
         - `City`: Cities where POIs are located (optional)
         - `Department`: French departments where POIs are located (optional)
-        
+
         **Relationships:**
         - `(:POI)-[:HAS_TYPE]->(:Type)`: Links POIs to their types
         - `(:POI)-[:IN_CITY]->(:City)`: Links POIs to cities (if city data available)
         - `(:POI)-[:IN_DEPARTMENT]->(:Department)`: Links POIs to departments (if department_code available)
-        
+
         **Why Graph Database?**
         Graph databases excel at relationship queries and enable powerful graph analytics:
         - Find all POIs of a specific type in a city
         - Discover POI clusters by geographic relationships
         - Analyze type distribution across departments
         - Perform graph traversals for recommendation systems
-        
+
         For detailed documentation, see: [Graph Model Documentation](docs/GRAPH_MODEL.md)
         """)
-        
+
         # Data table
         st.header("Detailed Statistics")
         summary_df = pd.DataFrame([
@@ -1115,17 +1114,17 @@ elif page == "Graph":
             {"Metric": "Total Relationships", "Count": graph_summary.get("total_relationships", 0)},
         ])
         st.dataframe(summary_df, width='stretch', hide_index=True)
-    
+
     else:
         st.warning("⚠️ Neo4j graph database is unavailable.")
         st.info("""
         The graph database may not be running or may not have been loaded yet.
-        
+
         **To load data into Neo4j:**
         1. Ensure Neo4j service is running: `docker compose ps neo4j`
         2. Run the graph loader: `docker compose exec holiday_scheduler python -m src.pipelines.run_graph_load`
         3. Or wait for the scheduled hourly ETL to complete (it automatically loads to Neo4j)
-        
+
         **Access Neo4j Browser:**
         - URL: http://localhost:7474
         - Username: neo4j

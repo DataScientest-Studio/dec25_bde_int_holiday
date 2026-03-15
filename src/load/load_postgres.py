@@ -11,7 +11,7 @@ import psycopg2
 from dotenv import load_dotenv
 import os
 
-from src.config import PROCESSED_DATA_DIR, PROJECT_ROOT
+from src.config import PROCESSED_DATA_DIR
 
 # Load environment variables
 load_dotenv()
@@ -27,10 +27,10 @@ POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "holiday")
 def get_db_connection():
     """
     Create and return a PostgreSQL database connection.
-    
+
     Returns:
         psycopg2.connection: Database connection object
-    
+
     Raises:
         psycopg2.Error: If connection fails
     """
@@ -55,7 +55,7 @@ def get_db_connection():
 def health_check() -> bool:
     """
     Perform a health check on the database connection.
-    
+
     Returns:
         bool: True if connection is healthy, False otherwise
     """
@@ -74,10 +74,10 @@ def health_check() -> bool:
 def ensure_data_source(conn) -> int:
     """
     Ensure the 'datatourisme' data source exists and return its ID.
-    
+
     Args:
         conn: Database connection
-    
+
     Returns:
         int: Data source ID
     """
@@ -88,10 +88,10 @@ def ensure_data_source(conn) -> int:
             ('datatourisme',)
         )
         result = cur.fetchone()
-        
+
         if result:
             return result[0]
-        
+
         # Insert if it doesn't exist
         cur.execute(
             "INSERT INTO data_source (name, description) VALUES (%s, %s) RETURNING id",
@@ -105,18 +105,18 @@ def ensure_data_source(conn) -> int:
 def parse_timestamp(timestamp_str: str) -> Optional[datetime]:
     """
     Parse a timestamp string to datetime object.
-    
+
     Args:
         timestamp_str: Timestamp string (e.g., '2026-02-03' or '2026-02-03T10:30:00Z')
-    
+
     Returns:
         Optional[datetime]: Parsed datetime or None if invalid/empty
     """
     if not timestamp_str or timestamp_str.strip() == '':
         return None
-    
+
     timestamp_str = timestamp_str.strip()
-    
+
     # Try common formats
     formats = [
         '%Y-%m-%d',
@@ -125,13 +125,13 @@ def parse_timestamp(timestamp_str: str) -> Optional[datetime]:
         '%Y-%m-%d %H:%M:%S',
         '%Y-%m-%d %H:%M:%S%z',
     ]
-    
+
     for fmt in formats:
         try:
             return datetime.strptime(timestamp_str, fmt)
         except ValueError:
             continue
-    
+
     # If all formats fail, return None
     return None
 
@@ -139,27 +139,27 @@ def parse_timestamp(timestamp_str: str) -> Optional[datetime]:
 def parse_float(value: str) -> Optional[float]:
     """
     Safely parse a string to float.
-    
+
     Args:
         value: String value to parse
-    
+
     Returns:
         Optional[float]: Parsed float or None if invalid
     """
     if not value or value.strip() == '':
         return None
-    
+
     try:
         return float(value.strip())
     except (ValueError, TypeError):
         return None
 
 
-def create_etl_run(conn, run_type: str, status: str, rows_processed: int, 
+def create_etl_run(conn, run_type: str, status: str, rows_processed: int,
                    rows_inserted: int, rows_skipped: int, message: Optional[str] = None) -> int:
     """
     Create an ETL run record in the etl_run table.
-    
+
     Args:
         conn: Database connection
         run_type: Type of run ('extract' or 'load')
@@ -168,7 +168,7 @@ def create_etl_run(conn, run_type: str, status: str, rows_processed: int,
         rows_inserted: Rows inserted
         rows_skipped: Rows skipped
         message: Optional message
-        
+
     Returns:
         int: ETL run ID
     """
@@ -186,18 +186,18 @@ def create_etl_run(conn, run_type: str, status: str, rows_processed: int,
 def load_pois_from_csv(csv_path: Path, source_id: int, conn) -> Tuple[int, int, int]:
     """
     Load POIs from CSV file into PostgreSQL with UPSERT.
-    
+
     Supports both naming conventions:
     - uuid OR id
     - lat OR latitude
     - lon OR longitude
     - lastUpdate OR last_update
-    
+
     Args:
         csv_path: Path to CSV file
         source_id: Data source ID
         conn: Database connection
-    
+
     Returns:
         Tuple[int, int, int]: (inserted_count, updated_count, skipped_count)
     """
@@ -206,7 +206,7 @@ def load_pois_from_csv(csv_path: Path, source_id: int, conn) -> Tuple[int, int, 
     skipped_count = 0
     missing_coords_count = 0
     missing_coords_samples = []
-    
+
     upsert_query = """
         INSERT INTO poi (id, label, description, latitude, longitude, uri, type, city, department_code, last_update, raw_json, source_id)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
@@ -222,10 +222,10 @@ def load_pois_from_csv(csv_path: Path, source_id: int, conn) -> Tuple[int, int, 
             last_update = EXCLUDED.last_update,
             source_id = EXCLUDED.source_id
     """
-    
+
     with open(csv_path, 'r', encoding='utf-8') as f:
         reader = csv.DictReader(f)
-        
+
         with conn.cursor() as cur:
             for row in reader:
                 # Extract ID - support both 'uuid' and 'id' field names
@@ -233,13 +233,13 @@ def load_pois_from_csv(csv_path: Path, source_id: int, conn) -> Tuple[int, int, 
                 if not poi_id:
                     skipped_count += 1
                     continue
-                
+
                 # Parse coordinates - support both 'lat'/'lon' and 'latitude'/'longitude' field names
                 lat_value = row.get('lat') or row.get('latitude', '')
                 lon_value = row.get('lon') or row.get('longitude', '')
                 latitude = parse_float(lat_value)
                 longitude = parse_float(lon_value)
-                
+
                 # Validate coordinates
                 if latitude is None or longitude is None:
                     missing_coords_count += 1
@@ -248,11 +248,11 @@ def load_pois_from_csv(csv_path: Path, source_id: int, conn) -> Tuple[int, int, 
                         missing_coords_samples.append(poi_id)
                     skipped_count += 1
                     continue
-                
+
                 if not (-90 <= latitude <= 90) or not (-180 <= longitude <= 180):
                     skipped_count += 1
                     continue
-                
+
                 # Extract other fields - accept empty strings as None
                 label = row.get('label', '').strip() or None
                 description = row.get('description', '').strip() or None
@@ -260,12 +260,12 @@ def load_pois_from_csv(csv_path: Path, source_id: int, conn) -> Tuple[int, int, 
                 type_value = row.get('type', '').strip() or None
                 city = row.get('city', '').strip() or None
                 department_code = row.get('department_code', '').strip() or None
-                
+
                 # Support both 'lastUpdate' and 'last_update' field names
                 # If missing, set to NULL
                 last_update_str = row.get('lastUpdate') or row.get('last_update', '')
                 last_update = parse_timestamp(last_update_str) if last_update_str else None
-                
+
                 # raw_json is NULL for now (unless CSV has a raw_json column)
                 raw_json = None
                 if 'raw_json' in row and row.get('raw_json', '').strip():
@@ -274,11 +274,11 @@ def load_pois_from_csv(csv_path: Path, source_id: int, conn) -> Tuple[int, int, 
                         raw_json = json.dumps(json.loads(row['raw_json']))
                     except (json.JSONDecodeError, ValueError):
                         raw_json = None
-                
+
                 # Check if POI already exists to count inserts vs updates
                 cur.execute("SELECT id FROM poi WHERE id = %s", (poi_id,))
                 exists = cur.fetchone() is not None
-                
+
                 # Execute UPSERT
                 try:
                     cur.execute(upsert_query, (
@@ -295,30 +295,30 @@ def load_pois_from_csv(csv_path: Path, source_id: int, conn) -> Tuple[int, int, 
                         raw_json,
                         source_id
                     ))
-                    
+
                     if exists:
                         updated_count += 1
                     else:
                         inserted_count += 1
-                    
+
                     # Commit every 100 rows for better performance
                     if (inserted_count + updated_count) % 100 == 0:
                         conn.commit()
-                        
+
                 except psycopg2.Error as e:
                     conn.rollback()
                     print(f"[WARNING] Error inserting POI {poi_id}: {e}")
                     skipped_count += 1
-            
+
             # Final commit
             conn.commit()
-    
+
     # Log missing coordinates information
     if missing_coords_count > 0:
         print(f"[WARNING] {missing_coords_count} rows skipped due to missing coordinates")
         if missing_coords_samples:
             print(f"[INFO] Sample UUIDs with missing coordinates: {', '.join(missing_coords_samples)}")
-    
+
     return (inserted_count, updated_count, skipped_count)
 
 
@@ -326,32 +326,32 @@ def main():
     """Main function for running the loader as a script."""
     print("PostgreSQL POI Loader")
     print("=" * 50)
-    
+
     # Health check
     print("Performing database health check...")
     if not health_check():
         print("[ERROR] Database connection failed. Please check:")
-        print(f"  1. PostgreSQL is running: docker compose up -d")
-        print(f"  2. Connection parameters in .env or environment variables")
+        print("  1. PostgreSQL is running: docker compose up -d")
+        print("  2. Connection parameters in .env or environment variables")
         print(f"     POSTGRES_HOST={POSTGRES_HOST}")
         print(f"     POSTGRES_PORT={POSTGRES_PORT}")
         print(f"     POSTGRES_DB={POSTGRES_DB}")
         print(f"     POSTGRES_USER={POSTGRES_USER}")
         sys.exit(1)
-    
+
     print("[OK] Database connection successful")
-    
+
     # Get CSV file path
     csv_path = PROCESSED_DATA_DIR / "datatourisme_pois.csv"
-    
+
     if not csv_path.exists():
         print(f"[ERROR] CSV file not found: {csv_path}")
         print("Please run the extraction first:")
         print("  py -m src.extract.fetch_datatourisme --page-size 50 --page 1")
         sys.exit(1)
-    
+
     print(f"[OK] Found CSV file: {csv_path}")
-    
+
     # Connect to database
     try:
         conn = get_db_connection()
@@ -359,19 +359,19 @@ def main():
     except ConnectionError as e:
         print(f"[ERROR] {e}")
         sys.exit(1)
-    
+
     try:
         # Ensure data source exists
         print("Ensuring data source exists...")
         source_id = ensure_data_source(conn)
         print(f"[OK] Data source ID: {source_id}")
-        
+
         # Load POIs from CSV
         print(f"Loading POIs from {csv_path}...")
         inserted, updated, skipped = load_pois_from_csv(csv_path, source_id, conn)
-        
+
         total_processed = inserted + updated + skipped
-        
+
         # Create ETL run record
         try:
             run_id = create_etl_run(
@@ -386,7 +386,7 @@ def main():
             print(f"[OK] ETL run recorded (ID: {run_id})")
         except Exception as e:
             print(f"[WARNING] Failed to record ETL run: {e}")
-        
+
         # Print summary
         print("\n" + "=" * 50)
         print("Load Summary:")
@@ -395,12 +395,12 @@ def main():
         print(f"  Updated: {updated}")
         print(f"  Skipped (invalid data): {skipped}")
         print("=" * 50)
-        
+
         if skipped > 0:
             print(f"[WARNING] {skipped} rows were skipped due to invalid data (missing coordinates, etc.)")
-        
+
         print("[OK] Data loading completed successfully!")
-        
+
     except Exception as e:
         # Record failed ETL run
         try:
@@ -413,9 +413,9 @@ def main():
                 rows_skipped=0,
                 message=f"Error: {str(e)}"
             )
-        except:
+        except Exception:
             pass
-        
+
         print(f"[ERROR] Error during data loading: {e}")
         conn.rollback()
         sys.exit(1)
@@ -425,4 +425,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
