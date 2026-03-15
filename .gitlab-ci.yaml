@@ -105,13 +105,12 @@ build-scheduler:
 # ──────────────────────────────────────
 deploy:
   stage: deploy
+  image: bitnami/kubectl:latest
   tags:
     - docker
   before_script:
-    # Install kubectl
-    - choco install kubernetes-cli -y; $true
-    # Configure cluster access (set KUBECONFIG in GitLab CI/CD Variables)
-    - $env:KUBECONFIG = "$CI_PROJECT_DIR/kubeconfig"
+    - echo "$KUBECONFIG_CONTENT" > /tmp/kubeconfig
+    - export KUBECONFIG=/tmp/kubeconfig
   script:
     - echo "Deploying to Kubernetes..."
     - kubectl apply -f k8s/namespace.yaml
@@ -130,6 +129,7 @@ deploy:
     # Wait for rollout
     - kubectl -n holiday rollout status deployment/api --timeout=120s
     - kubectl -n holiday rollout status deployment/dashboard --timeout=120s
+    - kubectl -n holiday rollout status deployment/scheduler --timeout=120s
   environment:
     name: production
   only:
