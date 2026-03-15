@@ -4,9 +4,8 @@ Tests /health, /pois, /stats, and /graph/summary endpoints.
 """
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import Mock, patch, MagicMock
-from sqlalchemy.orm import Session
-from sqlalchemy import create_engine
+from unittest.mock import patch
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
 from src.api.main import app
@@ -15,21 +14,34 @@ from src.api.models import POI
 from datetime import datetime
 
 # Test database setup (in-memory SQLite for unit tests)
+# Use StaticPool so the same in-memory DB is shared across threads
+from sqlalchemy.pool import StaticPool
+
 TEST_DATABASE_URL = "sqlite:///:memory:"
-engine = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
+engine = create_engine(
+    TEST_DATABASE_URL,
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
+)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+@pytest.fixture(autouse=True)
+def setup_db():
+    """Create and drop tables for every test."""
+    Base.metadata.create_all(bind=engine)
+    yield
+    Base.metadata.drop_all(bind=engine)
 
 
 @pytest.fixture
 def db_session():
     """Create a test database session."""
-    Base.metadata.create_all(bind=engine)
     db = TestingSessionLocal()
     try:
         yield db
     finally:
         db.close()
-        Base.metadata.drop_all(bind=engine)
 
 
 @pytest.fixture
@@ -40,13 +52,13 @@ def client(db_session):
             yield db_session
         finally:
             pass
-    
+
     # Override the database dependency
     app.dependency_overrides[get_db] = override_get_db
-    
+
     with TestClient(app) as test_client:
         yield test_client
-    
+
     app.dependency_overrides.clear()
 
 
@@ -137,7 +149,7 @@ def test_get_pois_pagination(client, db_session, sample_pois):
     assert len(data["items"]) == 1
     assert data["limit"] == 1
     assert data["offset"] == 0
-    
+
     # Second page
     response = client.get("/pois?limit=1&offset=1")
     assert response.status_code == 200
@@ -205,7 +217,7 @@ def test_get_graph_summary_success(client):
         "total_nodes": 20,
         "total_relationships": 25
     }
-    
+
     with patch('src.pipelines.graph_loader.get_graph_summary', return_value=mock_summary):
         response = client.get("/graph/summary")
         assert response.status_code == 200
@@ -227,7 +239,7 @@ def test_get_graph_summary_connection_error(client):
 def test_post_graph_sync_success(client):
     """Test POST /graph/sync endpoint with successful sync."""
     mock_result = (100, 10, 5, 3)  # pois_loaded, types, cities, departments
-    
+
     with patch('src.pipelines.graph_loader.load_pois_to_neo4j', return_value=mock_result):
         response = client.post("/graph/sync?batch_size=100")
         assert response.status_code == 200
@@ -250,19 +262,19 @@ def test_post_graph_sync_with_token(client):
     """Test POST /graph/sync endpoint with authentication token."""
     import os
     os.environ["GRAPH_SYNC_TOKEN"] = "test-token-123"
-    
+
     mock_result = (50, 5, 3, 2)
-    
+
     try:
         with patch('src.pipelines.graph_loader.load_pois_to_neo4j', return_value=mock_result):
             # Without token - should fail
             response = client.post("/graph/sync")
             assert response.status_code == 401
-            
+
             # With wrong token - should fail
             response = client.post("/graph/sync?sync_token=wrong-token")
             assert response.status_code == 401
-            
+
             # With correct token - should succeed
             response = client.post("/graph/sync?sync_token=test-token-123")
             assert response.status_code == 200
@@ -307,7 +319,7 @@ def test_get_itinerary_invalid_coordinates(client):
     # Invalid latitude
     response = client.get("/itinerary?lat=100&lon=2.3522&days=1")
     assert response.status_code == 422  # Validation error
-    
+
     # Invalid longitude
     response = client.get("/itinerary?lat=48.8566&lon=200&days=1")
     assert response.status_code == 422
@@ -318,8 +330,7 @@ def test_get_itinerary_invalid_days(client):
     # Days too high
     response = client.get("/itinerary?lat=48.8566&lon=2.3522&days=100")
     assert response.status_code == 422
-    
+
     # Days too low
     response = client.get("/itinerary?lat=48.8566&lon=2.3522&days=0")
     assert response.status_code == 422
-

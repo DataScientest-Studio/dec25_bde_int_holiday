@@ -143,24 +143,36 @@ def test_db(postgres_container):
 @pytest.fixture
 def test_neo4j(neo4j_container):
     """Set up Neo4j connection for testing."""
+    import src.pipelines.graph_loader as graph_loader_module
+
     connection_url = neo4j_container.get_connection_url()
+    neo4j_user = neo4j_container.username
+    neo4j_password = neo4j_container.password
 
-    # Extract auth from environment or use defaults
-    neo4j_user = "neo4j"
-    neo4j_password = neo4j_container.NEO4J_ADMIN_PASSWORD if hasattr(neo4j_container, 'NEO4J_ADMIN_PASSWORD') else "test"
+    # Save originals
+    original_uri = graph_loader_module.NEO4J_URI
+    original_user = graph_loader_module.NEO4J_USER
+    original_password = graph_loader_module.NEO4J_PASSWORD
 
-    # Set environment variables
+    # Patch module-level constants so get_neo4j_driver() uses them
+    graph_loader_module.NEO4J_URI = connection_url
+    graph_loader_module.NEO4J_USER = neo4j_user
+    graph_loader_module.NEO4J_PASSWORD = neo4j_password
+
+    # Also set env vars for any code that reads them directly
     os.environ["NEO4J_URI"] = connection_url
     os.environ["NEO4J_USER"] = neo4j_user
     os.environ["NEO4J_PASSWORD"] = neo4j_password
 
     yield connection_url, (neo4j_user, neo4j_password)
 
-    # Cleanup
+    # Restore originals
+    graph_loader_module.NEO4J_URI = original_uri
+    graph_loader_module.NEO4J_USER = original_user
+    graph_loader_module.NEO4J_PASSWORD = original_password
+
     for key in ["NEO4J_URI", "NEO4J_USER", "NEO4J_PASSWORD"]:
         os.environ.pop(key, None)
-
-
 def test_neo4j_connection(test_neo4j):
     """Test Neo4j connection."""
     connection_url, auth = test_neo4j
