@@ -50,3 +50,4 @@ class POI(Base):
     raw_json = Column(JSONBCompatible)
     source_id = Column(Integer)
     created_at = Column(DateTime, server_default=func.now())
+
