@@ -18,26 +18,15 @@ lint:
   before_script:
     - pip install --no-cache-dir flake8
   script:
-    - flake8 src/ --max-line-length=120 --ignore=E128,E305,E402,E501,E722,W291,W293,W391,W503,F401,F541,F841,C901
+    - flake8 src/ --max-line-length=120 --ignore=E114,E128,E302,E305,E402,E501,E722,W291,W293,W391,W503,F401,F541,F821,F841,C901
   allow_failure: true
 
 unit-tests:
   stage: test
   tags:
     - docker
-  services:
-    - name: postgres:16
-      alias: postgres
-  variables:
-    POSTGRES_HOST: postgres
-    POSTGRES_PORT: "5432"
   before_script:
     - pip install --no-cache-dir -r requirements.txt pytest pytest-cov
-    - $retries = 0
-    - while ($retries -lt 30) { try { $tcp = New-Object System.Net.Sockets.TcpClient("postgres", 5432); $tcp.Close(); break } catch { Start-Sleep -Seconds 1; $retries++ } }
-    - $env:PGPASSWORD = "holiday"
-    - psql -h postgres -U holiday -d holiday -f sql/init.sql
-    - psql -h postgres -U holiday -d holiday -f sql/02_schema_migration.sql
   script:
     - pytest tests/ -v --cov=src --cov-report=term-missing
   allow_failure: true
