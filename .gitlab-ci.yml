@@ -108,7 +108,9 @@ deploy:
   tags:
     - docker
   before_script:
-    - $env:KUBECONFIG = $env:KUBECONFIG_CONTENT
+    - $kubeconfigPath = Join-Path $env:TEMP "kubeconfig"
+    - $env:KUBECONFIG_CONTENT | Out-File -FilePath $kubeconfigPath -Encoding utf8
+    - $env:KUBECONFIG = $kubeconfigPath
   script:
     - echo "Deploying to Kubernetes..."
     - kubectl apply -f k8s/namespace.yaml
