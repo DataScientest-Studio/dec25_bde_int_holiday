@@ -102,17 +102,31 @@ deploy:
   stage: deploy
   tags:
     - docker
-  variables:
-    DATATOURISME_API_KEY: $DATATOURISME_API_KEY
+  before_script:
+    # Install kubectl
+    - choco install kubernetes-cli -y; $true
+    # Configure cluster access (set KUBECONFIG in GitLab CI/CD Variables)
+    - $env:KUBECONFIG = "$CI_PROJECT_DIR/kubeconfig"
   script:
-    - echo "Deploying version $CI_COMMIT_SHORT_SHA"
-    - docker compose -f docker-compose.yml down --remove-orphans; $true
-    - docker rm -f holiday_neo4j holiday_postgres holiday_api holiday_dashboard holiday_scheduler; $true
-    - docker network rm holiday_network; $true
-    - docker compose -f docker-compose.yml pull; $true
-    - docker compose -f docker-compose.yml up -d
+    - echo "Deploying to Kubernetes..."
+    - kubectl apply -f k8s/namespace.yaml
+    - kubectl apply -f k8s/secrets.yaml
+    - kubectl apply -f k8s/configmap.yaml
+    - kubectl apply -f k8s/postgres.yaml
+    - kubectl apply -f k8s/neo4j.yaml
+    - kubectl apply -f k8s/api.yaml
+    - kubectl apply -f k8s/dashboard.yaml
+    - kubectl apply -f k8s/scheduler.yaml
+    - kubectl apply -f k8s/ingress.yaml
+    # Update images to latest
+    - kubectl -n holiday set image deployment/api api=$CI_REGISTRY_IMAGE/api:$CI_COMMIT_SHORT_SHA
+    - kubectl -n holiday set image deployment/dashboard dashboard=$CI_REGISTRY_IMAGE/dashboard:$CI_COMMIT_SHORT_SHA
+    - kubectl -n holiday set image deployment/scheduler scheduler=$CI_REGISTRY_IMAGE/scheduler:$CI_COMMIT_SHORT_SHA
+    # Wait for rollout
+    - kubectl -n holiday rollout status deployment/api --timeout=120s
+    - kubectl -n holiday rollout status deployment/dashboard --timeout=120s
   environment:
-    name: staging
+    name: production
   only:
     - main
   when: manual
