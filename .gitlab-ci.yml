@@ -25,9 +25,12 @@ unit-tests:
   stage: test
   tags:
     - docker
+  variables:
+    PYTHONPATH: "."
   before_script:
     - pip install --no-cache-dir -r requirements.txt pytest pytest-cov
   script:
+    - $env:PYTHONPATH = "."
     - pytest tests/ -v --cov=src --cov-report=term-missing
   allow_failure: true
 
