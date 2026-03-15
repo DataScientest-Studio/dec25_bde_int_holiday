@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scheduler
+  namespace: holiday
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: scheduler
+  template:
+    metadata:
+      labels:
+        app: scheduler
+    spec:
+      containers:
+        - name: scheduler
+          image: registry.gitlab.com/miulina-group/holiday_machine_project/scheduler:latest
+          envFrom:
+            - configMapRef:
+                name: holiday-config
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: holiday-secrets
+                  key: POSTGRES_PASSWORD
+            - name: DATATOURISME_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: holiday-secrets
+                  key: DATATOURISME_API_KEY
