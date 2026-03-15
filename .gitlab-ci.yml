@@ -105,12 +105,11 @@ build-scheduler:
 # ──────────────────────────────────────
 deploy:
   stage: deploy
-  image: bitnami/kubectl:latest
   tags:
     - docker
   before_script:
-    - echo "$KUBECONFIG_CONTENT" > /tmp/kubeconfig
-    - export KUBECONFIG=/tmp/kubeconfig
+    - $env:KUBECONFIG = "$env:TEMP\kubeconfig"
+    - Set-Content -Path $env:KUBECONFIG -Value $env:KUBECONFIG_CONTENT
   script:
     - echo "Deploying to Kubernetes..."
     - kubectl apply -f k8s/namespace.yaml
@@ -122,11 +121,9 @@ deploy:
     - kubectl apply -f k8s/dashboard.yaml
     - kubectl apply -f k8s/scheduler.yaml
     - kubectl apply -f k8s/ingress.yaml
-    # Update images to latest
     - kubectl -n holiday set image deployment/api api=$CI_REGISTRY_IMAGE/api:$CI_COMMIT_SHORT_SHA
     - kubectl -n holiday set image deployment/dashboard dashboard=$CI_REGISTRY_IMAGE/dashboard:$CI_COMMIT_SHORT_SHA
     - kubectl -n holiday set image deployment/scheduler scheduler=$CI_REGISTRY_IMAGE/scheduler:$CI_COMMIT_SHORT_SHA
-    # Wait for rollout
     - kubectl -n holiday rollout status deployment/api --timeout=120s
     - kubectl -n holiday rollout status deployment/dashboard --timeout=120s
     - kubectl -n holiday rollout status deployment/scheduler --timeout=120s
