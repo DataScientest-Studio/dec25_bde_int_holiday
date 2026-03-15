@@ -38,14 +38,14 @@ def client(db_session):
             yield db_session
         finally:
             pass
-    
+
     # Override the database dependency
     from src.api.db import get_db
     app.dependency_overrides[get_db] = override_get_db
-    
+
     with TestClient(app) as test_client:
         yield test_client
-    
+
     app.dependency_overrides.clear()
 
 
@@ -142,7 +142,7 @@ def test_geojson_endpoint_basic(client, sample_pois):
     """Test basic GeoJSON endpoint functionality."""
     response = client.get("/pois/geojson")
     assert response.status_code == 200
-    
+
     data = response.json()
     assert data["type"] == "FeatureCollection"
     assert "features" in data
@@ -154,7 +154,7 @@ def test_geojson_endpoint_limit(client, sample_pois):
     """Test GeoJSON endpoint with limit parameter."""
     response = client.get("/pois/geojson?limit=2")
     assert response.status_code == 200
-    
+
     data = response.json()
     assert len(data["features"]) == 2
 
@@ -163,7 +163,7 @@ def test_geojson_endpoint_offset(client, sample_pois):
     """Test GeoJSON endpoint with offset parameter."""
     response = client.get("/pois/geojson?limit=1&offset=1")
     assert response.status_code == 200
-    
+
     data = response.json()
     assert len(data["features"]) == 1
     # Should get the second POI
@@ -174,7 +174,7 @@ def test_geojson_endpoint_type_filter(client, sample_pois):
     """Test GeoJSON endpoint with type filter."""
     response = client.get("/pois/geojson?type=Monument")
     assert response.status_code == 200
-    
+
     data = response.json()
     assert len(data["features"]) == 2
     for feature in data["features"]:
@@ -185,7 +185,7 @@ def test_geojson_endpoint_search_filter(client, sample_pois):
     """Test GeoJSON endpoint with search filter."""
     response = client.get("/pois/geojson?search=Paris")
     assert response.status_code == 200
-    
+
     data = response.json()
     # Should find POIs with "Paris" in description
     assert len(data["features"]) >= 2
@@ -198,7 +198,7 @@ def test_geojson_endpoint_bbox_filter(client, sample_pois):
     # Bbox around Paris (roughly)
     response = client.get("/pois/geojson?bbox=2.2,48.8,2.4,48.9")
     assert response.status_code == 200
-    
+
     data = response.json()
     # Should filter POIs within bbox
     assert len(data["features"]) >= 1
@@ -230,21 +230,21 @@ def test_geojson_feature_structure(client, sample_pois):
     """Test GeoJSON feature structure."""
     response = client.get("/pois/geojson?limit=1")
     assert response.status_code == 200
-    
+
     data = response.json()
     feature = data["features"][0]
-    
+
     # Check feature structure
     assert feature["type"] == "Feature"
     assert "geometry" in feature
     assert "properties" in feature
-    
+
     # Check geometry
     assert feature["geometry"]["type"] == "Point"
     assert len(feature["geometry"]["coordinates"]) == 2
     assert isinstance(feature["geometry"]["coordinates"][0], float)  # longitude
     assert isinstance(feature["geometry"]["coordinates"][1], float)  # latitude
-    
+
     # Check properties
     props = feature["properties"]
     assert "id" in props
@@ -255,4 +255,3 @@ def test_geojson_feature_structure(client, sample_pois):
     assert "last_update" in props
     assert "source_id" in props
     assert "created_at" in props
-
