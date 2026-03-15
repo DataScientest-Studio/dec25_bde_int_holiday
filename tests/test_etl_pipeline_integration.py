@@ -213,8 +213,7 @@ def test_etl_pipeline_end_to_end(test_db, mock_api_response):
                     session.close()
     finally:
         batch_etl_module.DATABASE_URL = original_db_url
-    finally:
-        batch_etl_module.DATABASE_URL = original_db_url
+ 
 
 
 def test_etl_pipeline_with_existing_data(test_db, mock_api_response):
