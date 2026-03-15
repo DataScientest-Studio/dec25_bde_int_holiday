@@ -144,22 +144,21 @@ def test_db(postgres_container):
 def test_neo4j(neo4j_container):
     """Set up Neo4j connection for testing."""
     connection_url = neo4j_container.get_connection_url()
-    auth = neo4j_container.get_connection_auth()
-    
+
+    # Extract auth from environment or use defaults
+    neo4j_user = "neo4j"
+    neo4j_password = neo4j_container.NEO4J_ADMIN_PASSWORD if hasattr(neo4j_container, 'NEO4J_ADMIN_PASSWORD') else "test"
+
     # Set environment variables
-    os.environ["NEO4J_URI"] = connection_url.replace("bolt://", "bolt://")
-    os.environ["NEO4J_USER"] = auth[0]
-    os.environ["NEO4J_PASSWORD"] = auth[1]
-    
-    yield connection_url, auth
-    
+    os.environ["NEO4J_URI"] = connection_url
+    os.environ["NEO4J_USER"] = neo4j_user
+    os.environ["NEO4J_PASSWORD"] = neo4j_password
+
+    yield connection_url, (neo4j_user, neo4j_password)
+
     # Cleanup
-    if "NEO4J_URI" in os.environ:
-        del os.environ["NEO4J_URI"]
-    if "NEO4J_USER" in os.environ:
-        del os.environ["NEO4J_USER"]
-    if "NEO4J_PASSWORD" in os.environ:
-        del os.environ["NEO4J_PASSWORD"]
+    for key in ["NEO4J_URI", "NEO4J_USER", "NEO4J_PASSWORD"]:
+        os.environ.pop(key, None)
 
 
 def test_neo4j_connection(test_neo4j):

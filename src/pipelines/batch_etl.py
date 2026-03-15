@@ -454,6 +454,22 @@ def extract_description(poi: Dict[str, Any]) -> Optional[str]:
     """Extract description from POI object."""
     desc_obj = poi.get("hasDescription") or poi.get("description")
 
+    # Handle list (e.g., [{"shortDescription": {"fr": "..."}}])
+    if isinstance(desc_obj, list):
+        for item in desc_obj:
+            if isinstance(item, dict):
+                short_desc = item.get("shortDescription") or item.get("dc:description")
+                if isinstance(short_desc, dict):
+                    desc = short_desc.get("fr") or short_desc.get("@fr") or short_desc.get("en") or short_desc.get("@en")
+                    if desc:
+                        return str(desc).strip()
+                    for value in short_desc.values():
+                        if isinstance(value, str) and value.strip():
+                            return value.strip()
+                elif isinstance(short_desc, str):
+                    return short_desc.strip()
+        return None
+
     if isinstance(desc_obj, dict):
         desc = desc_obj.get("fr") or desc_obj.get("@fr") or desc_obj.get("en") or desc_obj.get("@en")
         if desc:
