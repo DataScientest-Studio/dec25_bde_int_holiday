@@ -173,6 +173,21 @@ def test_neo4j(neo4j_container):
 
     for key in ["NEO4J_URI", "NEO4J_USER", "NEO4J_PASSWORD"]:
         os.environ.pop(key, None)
+
+def clean_neo4j(test_neo4j):
+    """Clear all Neo4j data before each test."""
+    connection_url, auth = test_neo4j
+    from neo4j import GraphDatabase
+    driver = GraphDatabase.driver(connection_url, auth=auth)
+    with driver.session() as session:
+        session.run("MATCH (n) DETACH DELETE n")
+        # Drop all constraints
+        result = session.run("SHOW CONSTRAINTS")
+        for record in result:
+            session.run(f"DROP CONSTRAINT {record['name']}")
+    driver.close()
+    yield
+
 def test_neo4j_connection(test_neo4j):
     """Test Neo4j connection."""
     connection_url, auth = test_neo4j
@@ -192,15 +207,18 @@ def test_create_constraints_and_indexes(test_neo4j):
     """Test that constraints and indexes are created."""
     driver = get_neo4j_driver()
     assert driver is not None
-    
+
     try:
         create_constraints_and_indexes(driver)
-        
-        # Verify constraints exist by trying to create duplicate (should fail gracefully)
+
+        # Verify constraint exists by checking we can create one node
         with driver.session() as session:
-            # Try to create a POI with duplicate ID (should work, but constraint exists)
             session.run("CREATE (p:POI {id: 'test-constraint'})")
-            session.run("CREATE (p:POI {id: 'test-constraint'})")  # Should fail or be handled
+
+            # Try to create duplicate — should raise ConstraintError
+            from neo4j.exceptions import ConstraintError
+            with pytest.raises(ConstraintError):
+                session.run("CREATE (p:POI {id: 'test-constraint'})")
     finally:
         driver.close()
 
