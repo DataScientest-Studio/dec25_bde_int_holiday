@@ -288,8 +288,26 @@ def test_post_graph_sync_with_token(client):
 
 def test_get_etl_status(client, db_session):
     """Test GET /etl/status endpoint."""
+    # Create the pipeline_runs table that the endpoint queries
+    from sqlalchemy import text
+    db_session.execute(text("""
+        CREATE TABLE IF NOT EXISTS pipeline_runs (
+            run_id TEXT PRIMARY KEY,
+            started_at TIMESTAMP,
+            finished_at TIMESTAMP,
+            status TEXT,
+            fetched_count INTEGER,
+            processed_count INTEGER,
+            inserted_count INTEGER,
+            updated_count INTEGER,
+            skipped_count INTEGER,
+            error_message TEXT
+        )
+    """))
+    db_session.commit()
+
     response = client.get("/etl/status")
-    # Should return 200 even if no runs exist (returns default values)
+    # Should return 404 (no runs exist) since table is empty
     assert response.status_code in [200, 404]
 
 
