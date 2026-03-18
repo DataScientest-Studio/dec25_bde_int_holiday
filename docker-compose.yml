@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   postgres:
     image: postgres:16
@@ -13,39 +15,44 @@ services:
       - ./sql/init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U holiday"]
+      test: ["CMD-SHELL", "pg_isready -U holiday -d holiday"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - holiday_network
 
   api:
     build:
       context: .
       dockerfile: Dockerfile.api
-    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 #added the line 
     container_name: holiday_api
+    environment:
+      - DATABASE_URL=postgresql://holiday:holiday@postgres:5432/holiday
+      - PYTHONUNBUFFERED=1
+      - DOCKER_ENV=true
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=holiday
+      - POSTGRES_PASSWORD=holiday
+      - POSTGRES_DB=holiday
     ports:
       - "8000:8000"
-    environment:
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: 5432
-      POSTGRES_DB: holiday
-      POSTGRES_USER: holiday
-      POSTGRES_PASSWORD: holiday
-      NEO4J_URI: ${NEO4J_URI:-bolt://neo4j:7687}
-      NEO4J_USER: ${NEO4J_USER:-neo4j}
-      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-neo4j_password}
     depends_on:
       postgres:
         condition: service_healthy
-      neo4j:
-        condition: service_healthy
-    restart: unless-stopped
+    volumes:
+      - ./src:/app/src
+      - ./sql:/app/sql
+      - ml_models:/app/src/ml/models
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
+    restart: unless-stopped
+    networks:
+      - holiday_network
 
   dashboard:
     build:
@@ -56,11 +63,15 @@ services:
       - "8501:8501"
     environment:
       API_BASE_URL: http://api:8000
-      DOCKER_ENV: 1
+      DOCKER_ENV: "true"
     depends_on:
       api:
         condition: service_healthy
     restart: unless-stopped
+    volumes:
+      - ./src/dashboard:/app/src/dashboard
+    networks:
+      - holiday_network
 
   batch_pipeline:
     build:
@@ -74,13 +85,16 @@ services:
       POSTGRES_USER: holiday
       POSTGRES_PASSWORD: holiday
       API_BASE_URL: http://api:8000
+      DATABASE_URL: postgresql://holiday:holiday@postgres:5432/holiday
     depends_on:
       postgres:
         condition: service_healthy
     restart: "no"
-    command: python pipelines/batch/run_pipeline.py
+    command: python -m src.pipelines.batch_etl
     profiles:
       - manual
+    networks:
+      - holiday_network
 
   holiday_scheduler:
     build:
@@ -93,15 +107,14 @@ services:
       POSTGRES_DB: holiday
       POSTGRES_USER: holiday
       POSTGRES_PASSWORD: holiday
-      DATATOURISME_API_KEY: ${DATATOURISME_API_KEY}
+      DATABASE_URL: postgresql://holiday:holiday@postgres:5432/holiday
+      DATATOURISME_API_KEY: ${DATATOURISME_API_KEY:-}
       DATATOURISME_BASE_URL: ${DATATOURISME_BASE_URL:-https://api.datatourisme.fr}
-      DATABASE_URL: ${DATABASE_URL:-}
       NEO4J_URI: ${NEO4J_URI:-bolt://neo4j:7687}
       NEO4J_USER: ${NEO4J_USER:-neo4j}
       NEO4J_PASSWORD: ${NEO4J_PASSWORD:-neo4j_password}
     volumes:
       - ./src:/app/src:ro
-      - ./pipelines:/app/pipelines:ro
       - ./sql:/app/sql:ro
       - scheduler_logs:/var/log
     depends_on:
@@ -113,7 +126,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
     networks:
-      - default
+      - holiday_network
 
   neo4j:
     image: neo4j:5.15-community
@@ -137,15 +150,15 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - default
+      - holiday_network
 
 volumes:
   postgres_data:
   scheduler_logs:
   neo4j_data:
   neo4j_logs:
+  ml_models:
 
 networks:
-  default:
-    name: holiday_network
-
+  holiday_network:
+    driver: bridge

@@ -1,1 +1,3 @@
-"""Dashboard module for POI data visualization."""
+"""
+Streamlit pages for the POI Analytics Dashboard.
+"""

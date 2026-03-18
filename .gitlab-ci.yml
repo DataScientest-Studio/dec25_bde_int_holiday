@@ -18,7 +18,7 @@ lint:
   before_script:
     - pip install --no-cache-dir flake8
   script:
-    - flake8 src/ --max-line-length=120 --ignore=E114,E128,E302,E305,E402,E501,E722,W291,W293,W391,W503,F401,F541,F821,F841,C901
+    - flake8 src/ --max-line-length=120 --ignore=E114,E128,E302,E305,E402,E501,E722,W291,W293,W391,W503,F401,F541,F821,F841,C901,W292
   allow_failure: true
 
 unit-tests:

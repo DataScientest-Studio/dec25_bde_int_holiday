@@ -186,6 +186,22 @@ docker compose up -d --build
 - Tag releases with `v*.*.*` format
 - Docker images are built and tagged
 
+### Kubernetes Deployment
+
+```bash
+    kubectl cluster-info
+    kubectl get nodes
+    docker build -f Dockerfile.api -t holiday-api:latest .
+    docker build -f Dockerfile.dashboard -t holiday-dashboard:latest .
+    docker build -f Dockerfile.scheduler -t holiday-scheduler:latest .
+    kubectl apply -f k8s/
+    kubectl port-forward -n holiday svc/api 8000:8000
+    kubectl port-forward -n holiday svc/dashboard-service 8501:8501
+```
+
+-use GitLab for deployment .gitlab-ci.yml 
+-lint, unit test, build are made automatically, the deployment is made manually
+
 ## Monitoring & Health Checks
 
 - **API Health**: `GET /health` endpoint
@@ -217,5 +233,5 @@ docker compose up -d --build
 
 ---
 
-*Last Updated: 2026-02-11*
+*Last Updated: 18.03.2026*
 

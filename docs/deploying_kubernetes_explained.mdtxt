@@ -1,0 +1,88 @@
+# Deploying with Kubernetes 
+#Implementing CI/CD pipelines
+
+# The K8S folder contains 9 .yaml files that describe together the application deployed into 
+# a Kubernetes cluster
+
+
+namespace.yaml -creates isolated environment 
+secrets.yaml - stores sensitive information
+configmap.yaml -stores non-sensitive data
+postgres.yaml -database: deployoment plus connection plus service
+neo4j.yaml -graph database: deployment plus connection plus service
+api.yaml -fast api: deployment plus connection plus service
+dashboard.yaml -streamlit: deployment plus connection plus service
+scheduler.yaml -ETL cron worker (Deployment only)
+ingress.yaml -external traffic routing
+
+
+1.namespace.yaml
+
+-creates an isolated space called 'holiday'
+-it isolates this project from other projects in the same cluster
+
+2.secrets.yamml
+
+-stores the api key
+-stores the neo4j authorisation
+-stores the database password
+
+*in production they should be encoded but this runs as a school project
+
+3.configmap.yaml
+
+-stores non sensitive informations as environment variables 
+
+4.postgres.yaml
+
+-creates 3 k8s resources
+    *the deployment uses the official postgres image
+        it uses the port 5432 - common for Postgres
+        the environment pulls POSTGRES_DB AND POSTGRES_USER from the configmap.yaml and POSTGRES_PASSWORD from secrets.yaml
+    **persistent volum-basically it claims 2 GB of memory in case the pod crashes
+    ***clusterip service- reaches pods with label postgres
+
+5.neo4j.yaml
+
+-creates 3 resources
+    *the deployment uses the official neo4j image
+        access the ports 7474 for http and 7687 for bolt
+        enableServiceLinks: false — Prevents K8s from injecting environment variables for every Service in the namespace (Neo4j is sensitive to this because some service link env vars conflict with its own config)
+        add memory and CPU limits because without it it might consume and crash everything
+    **persistent volum-basically it claims 2 GB of memory in case the pod crashes
+    ***exposes the 2 ports
+
+6.api.yaml
+
+-creates 2 resources
+    *the deployment uses the image holiday-api:latest, which is locally made 
+        uses both configmap and secrets for accesing postgres and neoforj in creating the endpoints
+        checks the health endpoint before moving to send traffic to the pod
+    **node port service
+        it exposes the API on port 30080 on every cluster node access on 
+        http://localhost:30080 when running Docker Desktop K8s
+        the 2 replicas give availability and load balancing in case of a crush
+
+7.dashboard.yaml
+
+-creates 2 resources 
+    *the deployment uses the image holiday-dashboard:latest (built from Dockerfile.dashboard)
+        only uses configmap, it talks only with the api endpoint, not the database
+    **nodeport service
+        port: 8501 → targetPort: 8501 → nodePort: 30050
+        Access the Streamlit dashboard at http://localhost:30050
+
+8.scheduler.yaml
+
+-created 1 replica for deployment
+    *the deployment uses holiday-scheduler:latest (built from Dockerfile.scheduler which contains cron)
+        environment: Full ConfigMap + all 3 secrets (it needs direct DB access + the API key to fetch data from DataTourisme)
+        this pod doesn't receive HTTP traffic. It's a background worker that runs ETL pipelines on a cron schedule internally.
+
+9.ingress.yaml
+
+-configures an Nginx Ingress Controller to route external HTTP traffic into the cluster based on URL path:
+
+
+    
+

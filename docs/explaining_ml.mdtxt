@@ -1,0 +1,30 @@
+
+
+We use an unsupervised ML step (KMeans) to discover natural groups of POIs. Then we post-process each cluster by assigning it to the nearest French airport using haversine distance. This hybrid approach separates mathematically optimal centroids from real service points (airports), which is useful when airports are unevenly distributed.
+
+
+kmeans_airport_endpoints.py
+    
+    KMeansAirportClusterer:
+
+        __init__: sets k, loads airports, sets random seed, and initializes model state.
+        _nearest_airport: picks the closest airport to a given (lat, lon) using      haversine distance.
+        fit(pois): filters POIs to valid lat/lon (and France bbox),
+        runs KMeans to learn k cluster centers and assign each POI to a cluster,
+        maps each cluster center to the nearest airport, returns a JSON-like dict with clusters, centers, mapped airport, and list of POIs per cluster.
+        predict(lat, lon): assigns a new point to the nearest KMeans cluster (if fitted),
+        returns the cluster + mapped airport info.
+
+utils.py
+
+    get_pois_for_clustering:the function the Kmeans use to get input data
+    calculate_pairwise_distances:this is an approximation; haversine is more accurate for Earth distances, but the purpose is ML
+    calculate_activity_diversity:this is useful in itinerary generation to encourage variety.
+
+kmeans_airport_endpoints.py
+
+    This file defines a FastAPI router that exposes your KMeans clustering model as HTTP endpoints.
+
+
+   
+

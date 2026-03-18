@@ -55,6 +55,7 @@ POSTGRES_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST
 # NEO4J CONNECTION
 # ============================================================================
 
+
 def get_neo4j_driver() -> Optional[Driver]:
     """Create and return Neo4j driver instance."""
     try:
@@ -71,6 +72,7 @@ def get_neo4j_driver() -> Optional[Driver]:
 # CONSTRAINTS & INDEXES
 # ============================================================================
 
+
 def create_constraints_and_indexes(driver: Driver) -> None:
     """Create constraints and indexes in Neo4j for optimal performance."""
     with driver.session() as session:
@@ -81,7 +83,7 @@ def create_constraints_and_indexes(driver: Driver) -> None:
             ("CREATE CONSTRAINT department_code_unique IF NOT EXISTS FOR (d:Department) REQUIRE d.code IS UNIQUE", "Department.code IS UNIQUE"),
             ("CREATE CONSTRAINT city_name_unique IF NOT EXISTS FOR (c:City) REQUIRE c.name IS UNIQUE", "City.name IS UNIQUE"),
         ]
-        
+
         for constraint_query, constraint_name in constraints:
             try:
                 session.run(constraint_query)
@@ -92,12 +94,12 @@ def create_constraints_and_indexes(driver: Driver) -> None:
                     logger.debug(f"Constraint {constraint_name} already exists")
                 else:
                     logger.warning(f"Error creating constraint {constraint_name}: {e}")
-        
+
         # Create indexes for better query performance
         indexes = [
             ("CREATE INDEX poi_type_index IF NOT EXISTS FOR (p:POI) ON (p.type)", "POI.type"),
         ]
-        
+
         for index_query, index_name in indexes:
             try:
                 session.run(index_query)
@@ -113,21 +115,22 @@ def create_constraints_and_indexes(driver: Driver) -> None:
 # DATA LOADING
 # ============================================================================
 
+
 def fetch_pois_from_postgres() -> List[Dict[str, Any]]:
     """Fetch all POIs from PostgreSQL database."""
     try:
         engine = create_engine(POSTGRES_URL)
         SessionLocal = sessionmaker(bind=engine)
         session = SessionLocal()
-        
+
         query = text("""
-            SELECT 
-                id, label, description, latitude, longitude, 
+            SELECT
+                id, label, description, latitude, longitude,
                 uri, type, city, department_code, theme, last_update
             FROM poi
             ORDER BY id
         """)
-        
+
         result = session.execute(query)
         pois = []
         for row in result:
@@ -144,7 +147,7 @@ def fetch_pois_from_postgres() -> List[Dict[str, Any]]:
                 "theme": row[9],
                 "last_update": row[10].isoformat() if row[10] else None
             })
-        
+
         session.close()
         logger.info(f"Fetched {len(pois)} POIs from PostgreSQL")
         return pois
@@ -152,50 +155,51 @@ def fetch_pois_from_postgres() -> List[Dict[str, Any]]:
         logger.error(f"Failed to fetch POIs from PostgreSQL: {e}")
         raise
 
+
 def load_pois_to_neo4j(batch_size: int = 100) -> Tuple[int, int, int, int]:
     """
     Load POIs from PostgreSQL into Neo4j graph database.
-    
+
     Creates:
     - POI nodes with properties: id, label, type, latitude, longitude, uri, theme, last_update
     - Type nodes (if type exists)
     - City nodes (if city exists)
     - Department nodes (if department_code exists)
     - Relationships: HAS_TYPE, IN_CITY, IN_DEPARTMENT
-    
+
     Args:
         batch_size: Number of POIs to process in each batch
-        
+
     Returns:
         Tuple of (pois_loaded, types_created, cities_created, departments_created)
     """
     driver = get_neo4j_driver()
     if not driver:
         raise ConnectionError("Failed to connect to Neo4j")
-    
+
     try:
         # Create constraints and indexes
         create_constraints_and_indexes(driver)
-        
+
         # Fetch POIs from PostgreSQL
         pois = fetch_pois_from_postgres()
-        
+
         if not pois:
             logger.warning("No POIs found in PostgreSQL")
             return (0, 0, 0, 0)
-        
+
         logger.info(f"Loading {len(pois)} POIs into Neo4j...")
-        
+
         pois_loaded = 0
         types_created = set()
         cities_created = set()
         departments_created = set()
-        
+
         with driver.session() as session:
             # Process in batches
             for i in range(0, len(pois), batch_size):
                 batch = pois[i:i + batch_size]
-                
+
                 for poi in batch:
                     try:
                         # Create or merge POI node
@@ -220,64 +224,64 @@ def load_pois_to_neo4j(batch_size: int = 100) -> Tuple[int, int, int, int]:
                             "last_update": poi.get("last_update")
                         })
                         pois_loaded += 1
-                        
+
                         # Create Type node and relationship (if type exists)
                         if poi.get("type"):
                             type_name = poi["type"]
                             types_created.add(type_name)
-                            
+
                             # Create or merge Type node
                             session.run("""
                                 MERGE (t:Type {name: $name})
                             """, {"name": type_name})
-                            
+
                             # Create HAS_TYPE relationship
                             session.run("""
                                 MATCH (p:POI {id: $poi_id})
                                 MATCH (t:Type {name: $type_name})
                                 MERGE (p)-[:HAS_TYPE]->(t)
                             """, {"poi_id": poi["id"], "type_name": type_name})
-                        
+
                         # Create City node and relationship (if city exists)
                         if poi.get("city"):
                             city_name = poi["city"]
                             cities_created.add(city_name)
-                            
+
                             # Create or merge City node
                             session.run("""
                                 MERGE (c:City {name: $name})
                             """, {"name": city_name})
-                            
+
                             # Create IN_CITY relationship
                             session.run("""
                                 MATCH (p:POI {id: $poi_id})
                                 MATCH (c:City {name: $city_name})
                                 MERGE (p)-[:IN_CITY]->(c)
                             """, {"poi_id": poi["id"], "city_name": city_name})
-                        
+
                         # Create Department node and relationship (if department_code exists)
                         if poi.get("department_code"):
                             dept_code = poi["department_code"]
                             departments_created.add(dept_code)
-                            
+
                             # Create or merge Department node
                             session.run("""
                                 MERGE (d:Department {code: $code})
                             """, {"code": dept_code})
-                            
+
                             # Create IN_DEPARTMENT relationship
                             session.run("""
                                 MATCH (p:POI {id: $poi_id})
                                 MATCH (d:Department {code: $dept_code})
                                 MERGE (p)-[:IN_DEPARTMENT]->(d)
                             """, {"poi_id": poi["id"], "dept_code": dept_code})
-                    
+
                     except Exception as e:
                         logger.warning(f"Error processing POI {poi.get('id', 'unknown')}: {e}")
                         continue
-                
+
                 logger.info(f"Processed {min(i + batch_size, len(pois))}/{len(pois)} POIs...")
-        
+
         logger.info("=" * 60)
         logger.info("Graph Load Complete:")
         logger.info(f"  - POIs loaded: {pois_loaded}")
@@ -285,46 +289,47 @@ def load_pois_to_neo4j(batch_size: int = 100) -> Tuple[int, int, int, int]:
         logger.info(f"  - Cities created: {len(cities_created)}")
         logger.info(f"  - Departments created: {len(departments_created)}")
         logger.info("=" * 60)
-        
+
         return (pois_loaded, len(types_created), len(cities_created), len(departments_created))
-    
+
     finally:
         driver.close()
+
 
 def get_graph_summary() -> Dict[str, Any]:
     """
     Get summary statistics from Neo4j graph.
-    
+
     Returns:
         Dictionary with counts of nodes and relationships
     """
     driver = get_neo4j_driver()
     if not driver:
         raise ConnectionError("Failed to connect to Neo4j")
-    
+
     try:
         with driver.session() as session:
             # Count POI nodes
             poi_count = session.run("MATCH (p:POI) RETURN count(p) as count").single()["count"]
-            
+
             # Count Type nodes
             type_count = session.run("MATCH (t:Type) RETURN count(t) as count").single()["count"]
-            
+
             # Count City nodes
             city_count = session.run("MATCH (c:City) RETURN count(c) as count").single()["count"]
-            
+
             # Count Department nodes
             dept_count = session.run("MATCH (d:Department) RETURN count(d) as count").single()["count"]
-            
+
             # Count HAS_TYPE relationships
             has_type_count = session.run("MATCH ()-[r:HAS_TYPE]->() RETURN count(r) as count").single()["count"]
-            
+
             # Count IN_CITY relationships
             in_city_count = session.run("MATCH ()-[r:IN_CITY]->() RETURN count(r) as count").single()["count"]
-            
+
             # Count IN_DEPARTMENT relationships
             in_dept_count = session.run("MATCH ()-[r:IN_DEPARTMENT]->() RETURN count(r) as count").single()["count"]
-            
+
             return {
                 "poi_nodes": poi_count,
                 "type_nodes": type_count,
@@ -338,4 +343,3 @@ def get_graph_summary() -> Dict[str, Any]:
             }
     finally:
         driver.close()
-
