@@ -1,0 +1,340 @@
+# Holiday Itinerary — Final Report (Data Engineering Project)
+
+**Repository:** `DataScientest-Studio/dec25_bde_int_holiday`  
+**Date:** 2026-03-23  
+**Authors:** Munir Al Tawil, Roxana Miu, Ulrich Kitieu
+**Course/Module:** Data Engineering/ December 05
+
+---
+
+## 1. Executive Summary (1/2 page)
+
+**Goal:** Build a data engineering platform that ingests tourism POI data, stores it in relational + graph databases, exposes it through an API, and provides interactive analytics + itinerary generation in a web UI.
+
+**What we delivered (high-level):**
+- Batch ETL from **DataTourisme API** → **PostgreSQL**
+- Graph projection into **Neo4j** using a graph loader
+- **FastAPI** service exposing POIs + stats + charts + graph summary + ETL run tracking/control
+- **Streamlit dashboard** for analytics, mapping, and itinerary generation
+- **Scheduler (cron)** container for automation (hourly ETL + graph load)
+- **CI/CD** workflows (GitHub Actions) for lint/test/build/release
+- Documentation and diagrams (`docs/`), including `docs/uml.puml` and `docs/erd.puml`
+
+**Key outcomes (fill in):**
+- POIs ingested: **~____**
+- ETL runtime: **~____ min**
+- Neo4j nodes/relationships: **____ / ____**
+- Dashboard key features demonstrated: **(overview, charts, map, itinerary, graph stats, clustering)**
+
+---
+
+## 2. Problem Statement & Requirements
+
+### 2.1 Problem Statement
+Tourism POIs are available through APIs but are difficult to use directly for analytics and itinerary generation because:
+- data is large and paginated
+- data quality varies (missing fields)/hard to implement a proper ML due to        inconsistent data and lack of historical data
+- users need both relational analysis (aggregations) and relationship navigation (graph)
+- a usable interface is needed for exploration and demo
+
+### 2.2 Functional Requirements (what the system must do)
+- Ingest POIs from DataTourisme API
+- Store and query POIs efficiently
+- Provide an API for consumption (POIs, stats, charts, geo export)
+- Provide a UI for non-technical users (dashboard)
+- Support automation (scheduled refresh)
+- Provide documentation and reproducibility (Docker/K8s/CI)
+
+### 2.3 Non-functional Requirements
+- Reproducible local deployment (Docker Compose)
+- Observable pipeline (run tracking, health endpoint)
+- Maintainable structure (separation between pipelines, API, dashboard)
+- Testable and continuously integrated
+
+---
+
+## 3. Data Sources
+
+### 3.1 DataTourisme API (Primary)
+- **Why chosen:** official structured source for French tourism POIs, regularly updated, suitable for ETL.
+- **Key data extracted:** POI identity, label/description, coordinates, type/category, location attributes, timestamps, raw JSON.
+
+**Documentation reference:** `docs/data_sources.md`
+
+
+## 4. Architecture Overview (the “why”)
+
+### 4.1 Why this architecture?
+We adopted a layered architecture to separate concerns:
+
+1) **Extraction/ETL layer**  
+2) **Storage layer** (PostgreSQL + Neo4j)  
+3) **API layer** (FastAPI)  
+4) **Frontend layer** (Streamlit)  
+5) **Automation** (cron scheduler)  
+
+This improves maintainability, allows independent scaling, and maps well to Docker/Kubernetes deployment.
+
+**Architecture references:**
+- `docs/architecture.md`
+- `docs/ARCHITECTURE_DIAGRAM.md`
+- `docs/uml.puml`
+- `docs/architecture_kubernetes.png`
+
+### 4.2 Why PostgreSQL + Neo4j?
+- **PostgreSQL** is ideal for:
+  - filtering, pagination, aggregates, analytics queries
+  - structured constraints and indexing
+  - auditability and run tracking (pipeline_runs)
+- **Neo4j** is ideal for:
+  - relationship-based exploration (POI → city → department; POI → type)
+  - graph statistics and future graph algorithms
+
+We use PostgreSQL as the **system of record**, and Neo4j as a **derived graph view** populated by a loader.
+
+---
+
+## 5. Data Modeling Decisions
+
+### 5.1 PostgreSQL Schema (ERD)
+- **Main table:** `poi`
+- **Run tracking:** `pipeline_runs`
+
+**Why these fields?**
+- `raw_json`: preserves original payload for traceability/debugging
+- `last_update`: supports incremental loads and update monitoring
+- location columns + indexes enable geographic views in dashboard
+
+**ERD references:**
+- `docs/erd.puml`
+- `docs/erd.png`
+- `docs/schema.md`
+- `sql/schema.sql`
+
+### 5.2 Indexing & Constraints (Why we did it)
+Explaining our decisions:
+- Why index on `type` and `last_update`
+  the dashboard and API frequently filter and aggregate by POI type (e.g., “restaurants”, “museums”, etc.). Indexing type speeds up:
+  WHERE type = ... filters
+  GROUP BY type / type distribution charts
+  Benefit: faster response times for the most common “slice-by-category” queries without scanning the full poi table.
+- Why coordinate validation constraints
+  Why: last_update supports “freshness” use cases:
+  showing “recently updated POIs”
+  building update timelines (charts)
+  enabling incremental ETL logic (load changes since the last run)
+- Why text search index (if configured)
+  Why: geospatial visualizations (map pages, GeoJSON endpoint, itinerary logic, clustering) assume coordinates are valid. Bad coordinates can:
+  break map rendering
+  distort clustering results
+  produce incorrect itineraries
+
+Benefits: consistency and availability
+
+---
+
+## 6. ETL Design
+
+### 6.1 Why batch ETL (not streaming)?
+- The source API is well-suited to periodic refresh
+- University scope/time constraints
+- Simpler operational model: run hourly; track runs
+
+### 6.2 ETL Steps
+1. **Extract**: paginated calls with rate limiting  
+2. **Transform**: normalize fields, handle missing values  
+3. **Load**: UPSERT into `poi`, record run in `pipeline_runs`  
+
+**Evidence:**
+- `src/pipelines/batch_etl.py`
+- `docker/cron/crontab`
+- `Dockerfile.scheduler`
+
+### 6.3 Idempotency & Re-runs
+Explain:
+- How UPSERT logic prevents duplicates
+  we can safely re-run the pipeline (manually or via cron) without creating duplicate POI rows, while still refreshing fields that may have changed (label/description/type/coords/last_update/raw_json, etc.).
+- How run tracking helps detect failures and monitor volume
+  if a run ends with failed or has no finished_at, you immediately know the last run didn’t complete.
+- How graph loader uses MERGE for idempotent graph creation
+  MERGE ensures “create if missing, otherwise match existing”.
+
+### 6.4 Graph Loader (Neo4j)
+- Reads POIs from PostgreSQL
+- Creates nodes: POI, Type, City, Department
+- Creates relationships: HAS_TYPE, IN_CITY, IN_DEPARTMENT
+
+**Evidence:**
+- `src/pipelines/graph_loader.py`
+- `docs/GRAPH_MODEL.md`
+
+---
+
+## 7. API Design (FastAPI)
+
+### 7.1 Why FastAPI?
+- Fast iteration speed
+- Automatic OpenAPI docs (`/docs`)
+- Strong typing via Pydantic response models
+
+### 7.2 Endpoint groups and rationale
+Describe what each group is for:
+
+- **Core POI endpoints**: `GET /pois`, `GET /pois/{id}`, `GET /pois/geojson`  
+  *Why:* supports dashboard browsing, map layers, and external consumers.
+
+- **Analytics endpoints**: `/stats`, `/charts/*`, `/quality`  
+  *Why:* pre-aggregated answers for UI charts without loading huge datasets client-side.
+
+- **Pipeline monitoring**: `/pipeline/last-run`, `/health`  
+  *Why:* observability and operational readiness.
+
+- **Graph endpoints**: `/graph/summary`, `/graph/sync`  
+  *Why:* show graph health and (optionally) allow manual refresh.
+
+- **Clustering endpoints**: `/get/api/kmeans_airport`, `/fit` `/predict`  
+  *Why:* observability and operational readiness.
+
+**Evidence:**
+- `src/api/main.py`
+- `src/analytics/analytics.py`
+
+---
+
+## 8. Frontend (Streamlit)
+
+### 8.1 Why Streamlit?
+- Rapid development
+- Great for demos and dashboards
+- Easy multipage structure
+
+### 8.2 Dashboard Features
+Document:
+- Overview KPIs
+- Charts (types, updates)
+- Map visualization
+- Graph summary page
+- Itinerary generator UI
+
+**Evidence:**
+- `src/dashboard/app.py`
+- `src/dashboard/pages/*`
+
+### 8.3 Presentation App (Docs Viewer / Slide Mode)
+- **Why added:** enables defense-ready demo driven by repo documentation
+- **What it does:** reads `docs/` and presents in navigable “slides”
+
+**Evidence:**
+- `streamlit_app.py`
+- `pages/*`
+
+---
+
+## 9. ML Extension (If part of your defense)
+
+### 9.1 KMeans Airport Clustering
+- **What:** cluster POIs (France) and map each cluster to nearest airport
+- **Why:** demonstrates an applied ML/analytics feature on top of the engineered data layer
+- **How:** FastAPI exposes endpoints; Streamlit visualizes results on map
+
+**Evidence:**
+- `src/api/kmeans_airport_endpoints.py`
+- `src/ml/*`
+- `src/dashboard/pages/6_clustering.py`
+
+---
+
+## 10. Deployment & Operations
+
+### 10.1 Local deployment (Docker Compose)
+- **Why Docker Compose:** fastest reproducible setup for demo/dev
+- Services: postgres, api, dashboard, scheduler, neo4j
+
+**Evidence:** `docker-compose.yml`, `Dockerfile.*`
+
+### 10.2 Kubernetes deployment (optional/advanced)
+- **Why Kubernetes:** aligns with production-style deployment and university stage requirements
+- **What’s included:** manifests under `k8s/`, documented in `docs/deploying_kubernetes_explained.mdtxt`
+
+---
+
+## 11. CI/CD
+
+### 11.1 Why CI/CD
+- Enforces consistent lint/test/build
+- Prevents regressions
+- Provides reliable release process
+
+### 11.2 What runs in CI
+Describe (fill in based on your YAMLs):
+- Lint: flake8
+- Tests: pytest + coverage
+- Docker build verification
+- Release workflow actions
+
+**Evidence:**
+- `.github/workflows/ci.yaml`
+- `.github/workflows/release.yaml`
+
+---
+
+## 12. Testing Strategy
+
+### 12.1 Current status
+- Summarize test coverage and what exists in `tests/`
+
+### 12.2 What should be added (recommended)
+- API tests for: `/health`, `/pois` (filters), `/stats`, `/graph/summary`, ML endpoints
+- Mocking strategy for DB and Neo4j
+- Contract tests for API responses (Pydantic schemas)
+
+---
+
+## 13. Results & Demo Guide
+
+### 13.1 How to run (Docker)
+Provide exact commands (edit to match repo):
+```bash
+docker compose up -d --build
+```
+
+- API: `http://localhost:8000/docs`
+- Dashboard: `http://localhost:8501`
+
+### 13.2 How to demo in 5 minutes
+1) Show architecture diagram + UML  
+2) Show API Swagger `/docs`  
+3) Show dashboard Overview + Map + Charts  
+4) Show itinerary generation  
+5) Show graph summary + Neo4j presence  
+6) Show ETL run tracking  
+7) (Optional) Show clustering page  
+
+---
+
+## 14. Limitations, Risks, and Next Steps
+
+### 14.1 Limitations
+- Data quality varies in source fields
+- Neo4j graph derived from Postgres; sync timing matters
+- Some endpoints/features may be demo-oriented vs production-hardened
+
+### 14.2 Next steps
+- Increase test coverage + add CI gates
+- Improve incremental ETL (since timestamp)
+- Add better observability (structured logs, metrics)
+- Harden graph sync endpoint and access control
+- Consider caching for expensive analytics endpoints
+
+---
+
+## Appendix A — Evidence Index (Links / File Paths)
+
+- Architecture: `docs/architecture.md`, `docs/ARCHITECTURE_DIAGRAM.md`, `docs/uml.puml`
+- Schema/ERD: `sql/schema.sql`, `docs/schema.md`, `docs/erd.puml`, `docs/erd.png`
+- Graph model: `docs/GRAPH_MODEL.md`, `src/pipelines/graph_loader.py`
+- ETL: `src/pipelines/batch_etl.py`, `docker/cron/crontab`
+- API: `src/api/main.py`, `src/analytics/analytics.py`
+- Dashboard: `src/dashboard/app.py`, `src/dashboard/pages/*`
+- CI/CD: `.github/workflows/ci.yaml`, `.github/workflows/release.yaml` or through Kubernetes using GitLab 
+https://gitlab.com/miulina-group/holiday_machine_project/-/pipelines/2386612813

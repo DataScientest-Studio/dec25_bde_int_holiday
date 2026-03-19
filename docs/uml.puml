@@ -1,14 +1,22 @@
 @startuml Holiday_Itinerary_Architecture
 
-!define RECTANGLE class
+title Holiday / POI Platform - Architecture (Updated)
+
+' Make it look nicer
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam componentStyle rectangle
+skinparam wrapWidth 220
+skinparam maxMessageSize 120
 
 package "Data Sources" {
   [DataTourisme API] as DataTourisme
+  [Airports dataset\n(static / embedded)] as Airports
 }
 
 package "Extraction Layer" {
-  [Batch ETL Pipeline] as ETL
-  [Graph Loader] as GraphLoader
+  [Batch ETL Pipeline\n(pipelines/*)] as ETL
+  [Graph Loader\n(pipelines/*)] as GraphLoader
 }
 
 package "Storage Layer" {
@@ -16,6 +24,7 @@ package "Storage Layer" {
     [poi table] as POITable
     [pipeline_runs table] as PipelineRuns
   }
+
   database "Neo4j" as Neo4j {
     [POI nodes] as POINodes
     [Type nodes] as TypeNodes
@@ -24,66 +33,98 @@ package "Storage Layer" {
   }
 }
 
-package "API Layer" {
-  [FastAPI Application] as API {
-    [REST Endpoints] as Endpoints
-    [Analytics Functions] as Analytics
-  }
+package "API Layer (FastAPI)\n(src/api/main.py)" {
+  [FastAPI Application] as API
+
+  component "Core Endpoints" as CoreEndpoints
+  component "Analytics Endpoints" as AnalyticsEndpoints
+  component "Graph Endpoints" as GraphEndpoints
+  component "ETL Control Endpoints" as ETLEndpoints
+  component "Itinerary Endpoint\n/itinerary" as ItineraryEndpoint
+  component "KMeans Airport Router\n/api/kmeans-airport/*" as KMeansEndpoints
+
+  component "Analytics Functions\n(src/analytics/analytics.py)" as Analytics
+  component "Clustering / ML\n(src/ml/*)" as ML
 }
 
 package "Frontend Layer" {
-  [Streamlit Dashboard] as Dashboard
+  [Streamlit Dashboard\n(src/dashboard/app.py)] as Dashboard
+  [Streamlit Presentation\n(streamlit_app.py + pages/*)] as Presentation
 }
 
 package "Scheduler" {
-  [Cron Scheduler] as Scheduler
+  [Cron / Scheduler\n(Docker scheduler image)] as Scheduler
 }
 
-' Data flow
-DataTourisme --> ETL : "Fetch POI data"
-ETL --> Postgres : "Load POIs"
-Postgres --> GraphLoader : "Read POIs"
-GraphLoader --> Neo4j : "Create nodes/relationships"
+' =========================
+' Data flow (ETL)
+' =========================
+DataTourisme --> ETL : Fetch POI data
+ETL --> Postgres : Insert / update POIs\n+ pipeline_runs
 
+Postgres --> GraphLoader : Read POIs
+GraphLoader --> Neo4j : Create nodes / relationships
+
+Scheduler --> ETL : Trigger (hourly / periodic)
+Scheduler --> GraphLoader : Trigger after ETL
+
+' =========================
 ' API access
-Postgres --> API : "Query POIs"
-Neo4j --> API : "Query graph stats"
-API --> Dashboard : "Serve data"
+' =========================
+Postgres --> API : SQLAlchemy queries
+Neo4j --> API : Graph queries
 
-' Scheduler
-Scheduler --> ETL : "Hourly trigger"
-Scheduler --> GraphLoader : "After ETL"
+API --> Dashboard : HTTP JSON responses
+API --> Presentation : (optional)\nlinks/docs rendering
 
-' API Endpoints
-Endpoints --> Analytics : "Use analytics"
-Analytics --> Postgres : "Query data"
+' =========================
+' Internal API structure
+' =========================
+API --> CoreEndpoints
+API --> AnalyticsEndpoints
+API --> GraphEndpoints
+API --> ETLEndpoints
+API --> ItineraryEndpoint
+API --> KMeansEndpoints
 
+AnalyticsEndpoints --> Analytics
+CoreEndpoints --> Postgres
+Analytics --> Postgres
+
+GraphEndpoints --> Neo4j
+ETLEndpoints --> ETL : run-now/status
+ItineraryEndpoint --> Postgres : select POIs + coords
+KMeansEndpoints --> ML : fit/predict clusters
+ML --> Postgres : load POIs for clustering
+ML --> Airports : map cluster center\nto nearest airport
+
+' =========================
+' Notes
+' =========================
 note right of Postgres
-  **PostgreSQL Schema:**
-  - poi (id, label, type, city, department_code, lat, lng, ...)
-  - pipeline_runs (tracking)
-  - Indexes on location, type, last_update
+  **PostgreSQL schema (high level):**
+  - poi (id, label, type, city, department_code, latitude, longitude, ...)
+  - pipeline_runs (ETL run tracking)
 end note
 
 note right of Neo4j
-  **Neo4j Graph Model:**
+  **Neo4j graph model:**
   - Nodes: :POI, :Type, :City, :Department
-  - Relationships: 
+  - Relationships:
     - (:POI)-[:HAS_TYPE]->(:Type)
     - (:POI)-[:IN_CITY]->(:City)
     - (:POI)-[:IN_DEPARTMENT]->(:Department)
 end note
 
-note right of API
-  **API Endpoints:**
-  - GET /health
-  - GET /pois (pagination, search, filter)
-  - GET /pois/geojson
-  - GET /stats
-  - GET /charts/types
-  - GET /graph/summary
-  - POST /graph/sync
+note right of KMeansEndpoints
+  **KMeans airport endpoints (stateless):**
+  - GET /api/kmeans-airport/fit
+  - GET /api/kmeans-airport/predict
+end note
+
+note right of Dashboard
+  Dashboard pages call the API using API_BASE_URL
+  (local: localhost, docker/k8s: service DNS name).
 end note
 
 @enduml
-
