@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: ['*']
 
+env:
+  DATATOURISME_API_KEY: ${{ secrets.DATATOURISME_API_KEY }}
+
 jobs:
   lint-and-test:
     name: Lint and Test
