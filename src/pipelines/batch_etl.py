@@ -580,11 +580,11 @@ def fetch_pois_from_api(
     with exponential backoff.
 
     Args:
-        max_pages: Maximum number of pages to fetch
-        page_size: Number of items per page (max: 250)
-        limit_per_run: Maximum total POIs to fetch in this run
-        since_hours: Filter POIs updated in last N hours (if API supports)
-        rate_limiter: Rate limiter instance
+    max_pages: Maximum number of pages to fetch
+    page_size: Number of items per page (max: 250)
+    limit_per_run: Maximum total POIs to fetch in this run
+    since_hours: Filter POIs updated in last N hours (if API supports)
+    rate_limiter: Rate limiter instance
 
     Returns:
         List of raw POI dictionaries from the API
@@ -593,8 +593,8 @@ def fetch_pois_from_api(
     logger.info("EXTRACTION STEP: Fetching POIs from DataTourisme API")
     logger.info("=" * 60)
     
-   if not DATATOURISME_API_KEY:
-    raise ValueError("DATATOURISME_API_KEY not found. Please set it in your .env file.")
+    if not DATATOURISME_API_KEY:
+        raise ValueError("DATATOURISME_API_KEY not found. Please set it in your .env file.")
 
     if rate_limiter is None:
         rate_limiter = RateLimiter(MAX_REQUESTS_PER_SECOND, MAX_REQUESTS_PER_HOUR)
