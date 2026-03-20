@@ -414,7 +414,7 @@ async def get_stats(db: Session = Depends(get_db)):
             last_update_min=last_update_min,
             last_update_max=last_update_max
         )
-    except Exception:
+    except Exception as e:
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
