@@ -11,8 +11,6 @@ jobs:
   lint-and-test:
     name: Lint and Test
     runs-on: ubuntu-latest
-    env:
-      PYTHONPATH: ${{ github.workspace }}
     
     steps:
       - name: Checkout code
@@ -38,7 +36,6 @@ jobs:
         run: |
           pytest tests/ -v --cov=src --cov-report=xml --cov-report=html --cov-report=term
         env:
-          PYTHONPATH: .
           POSTGRES_HOST: localhost
           POSTGRES_PORT: 5432
           POSTGRES_DB: test_holiday

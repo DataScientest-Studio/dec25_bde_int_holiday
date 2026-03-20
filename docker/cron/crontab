@@ -2,5 +2,7 @@
 # Runs the batch ETL pipeline every hour at minute 0
 # Format: minute hour day month weekday user command
 # Note: Environment variables are loaded from docker-compose.yml
-0 * * * * root /app/run_etl.sh >> /var/log/cron.log 2>&1
+# 0 * * * * root /app/run_etl.sh >> /var/log/cron.log 2>&1      #for production
+# Runs every 5 minutes/ for demo
+*/5 * * * * root /app/run_etl.sh >> /var/log/cron.log 2>&1
 
