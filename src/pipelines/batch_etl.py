@@ -432,49 +432,50 @@ def extract_theme_from_uri(uri: str) -> Optional[str]:
         logger.debug(f"Error extracting theme from URI {uri}: {e}")
         return None
 
-def _mock_datatourisme_objects(limit: int = 10) -> List[Dict[str, Any]]:
+def _mock_datatourisme_objects(limit: int = 3) -> List[Dict[str, Any]]:
     """
-    Return a small deterministic dataset shaped like DataTourisme API objects.
-    Used when running tests/CI without a DATATOURISME_API_KEY.
+    Deterministic mock objects shaped like DataTourisme API 'objects'.
+    Must match expectations in tests/test_etl_pipeline_integration.py.
     """
-    base = [
+    objects = [
         {
-            "uuid": "00000000-0000-0000-0000-000000000001",
-            "label": {"fr": "Mock POI 1"},
+            "uuid": "test-poi-1",
+            "label": {"fr": "Test POI 1"},
             "type": "schema:Place",
-            "uri": "https://data.datatourisme.fr/restaurant/00000000-0000-0000-0000-000000000001",
+            "uri": "https://data.datatourisme.fr/restaurant/test-poi-1",
             "isLocatedAt": [{
                 "schema:address": [{"schema:postalCode": "75001", "schema:addressLocality": "Paris"}],
                 "schema:geo": {"schema:latitude": 48.8566, "schema:longitude": 2.3522},
             }],
-            "hasDescription": [{"shortDescription": {"fr": "Mock description 1"}}],
-            "lastUpdate": "2026-01-01T00:00:00Z",
+            "hasDescription": [{"shortDescription": {"fr": "Test description 1"}}],
+            "lastUpdate": "2026-01-02T00:00:00Z",
         },
         {
-            "uuid": "00000000-0000-0000-0000-000000000002",
-            "label": {"fr": "Mock POI 2"},
+            "uuid": "test-poi-2",
+            "label": {"fr": "Test POI 2"},
             "type": "schema:Place",
-            "uri": "https://data.datatourisme.fr/museum/00000000-0000-0000-0000-000000000002",
+            "uri": "https://data.datatourisme.fr/museum/test-poi-2",
             "isLocatedAt": [{
                 "schema:address": [{"schema:postalCode": "13001", "schema:addressLocality": "Marseille"}],
                 "schema:geo": {"schema:latitude": 43.2965, "schema:longitude": 5.3698},
             }],
-            "hasDescription": [{"shortDescription": {"fr": "Mock description 2"}}],
-            "lastUpdate": "2026-01-02T00:00:00Z",
+            "hasDescription": [{"shortDescription": {"fr": "Test description 2"}}],
+            "lastUpdate": "2026-01-03T00:00:00Z",
+        },
+        {
+            "uuid": "test-poi-3",
+            "label": {"fr": "Test POI 3"},
+            "type": "schema:Place",
+            "uri": "https://data.datatourisme.fr/heritage/test-poi-3",
+            "isLocatedAt": [{
+                "schema:address": [{"schema:postalCode": "69001", "schema:addressLocality": "Lyon"}],
+                "schema:geo": {"schema:latitude": 45.7640, "schema:longitude": 4.8357},
+            }],
+            "hasDescription": [{"shortDescription": {"fr": "Test description 3"}}],
+            "lastUpdate": "2026-01-04T00:00:00Z",
         },
     ]
-    # repeat deterministically to reach limit
-    out: List[Dict[str, Any]] = []
-    i = 0
-    while len(out) < max(0, limit):
-        item = dict(base[i % len(base)])
-        # make UUIDs unique if we repeat
-        if len(out) >= len(base):
-            item["uuid"] = f"00000000-0000-0000-0000-{len(out)+1:012d}"
-            item["uri"] = f"https://data.datatourisme.fr/mock/{item['uuid']}"
-        out.append(item)
-        i += 1
-    return out
+    return objects[: max(0, limit)]
 
 
 def extract_label(poi: Dict[str, Any]) -> Optional[str]:
