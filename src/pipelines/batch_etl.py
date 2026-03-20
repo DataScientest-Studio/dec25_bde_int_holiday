@@ -593,16 +593,8 @@ def fetch_pois_from_api(
     logger.info("EXTRACTION STEP: Fetching POIs from DataTourisme API")
     logger.info("=" * 60)
     
-    if not DATATOURISME_API_KEY:
-        # In CI/tests, we don't want to hit the real external API.
-        # Provide deterministic mock data so integration tests can run.
-        if os.getenv("CI") == "true" or os.getenv("PYTEST_CURRENT_TEST"):
-            logger.warning(
-                "DATATOURISME_API_KEY not set; using mock DataTourisme objects for tests/CI."
-            )
-            return _mock_datatourisme_objects(limit=min(limit_per_run, 3))
-
-        raise ValueError("DATATOURISME_API_KEY not found. Please set it in your .env file.")
+   if not DATATOURISME_API_KEY:
+    raise ValueError("DATATOURISME_API_KEY not found. Please set it in your .env file.")
 
     if rate_limiter is None:
         rate_limiter = RateLimiter(MAX_REQUESTS_PER_SECOND, MAX_REQUESTS_PER_HOUR)
