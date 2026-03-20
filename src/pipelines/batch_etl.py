@@ -599,7 +599,7 @@ def fetch_pois_from_api(
             logger.warning(
                 "DATATOURISME_API_KEY not set; using mock DataTourisme objects for tests/CI."
             )
-            return _mock_datatourisme_objects(limit=min(limit_per_run, 50))
+            return _mock_datatourisme_objects(limit=min(limit_per_run, 3))
 
         raise ValueError("DATATOURISME_API_KEY not found. Please set it in your .env file.")
 
