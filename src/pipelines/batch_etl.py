@@ -571,7 +571,7 @@ def fetch_pois_from_api(
     page_size: int = 250,
     limit_per_run: int = 500,
     since_hours: Optional[int] = None,
-    rate_limiter: Optional[RateLimiter] = None
+    rate_limiter: Optional[RateLimiter] = None,
 ) -> List[Dict[str, Any]]:
     """
     EXTRACTION STEP: Fetch POI data from DataTourisme REST API.
