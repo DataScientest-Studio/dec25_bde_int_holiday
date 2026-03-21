@@ -593,6 +593,8 @@ def fetch_pois_from_api(
     logger.info("EXTRACTION STEP: Fetching POIs from DataTourisme API")
     logger.info("=" * 60)
     
+    api_key = os.getenv("DATATOURISME_API_KEY", "")
+
     if not DATATOURISME_API_KEY:
         raise ValueError("DATATOURISME_API_KEY not found. Please set it in your .env file.")
 
@@ -602,9 +604,7 @@ def fetch_pois_from_api(
     all_objects = []
     current_page = 1
 
-    headers = {
-        "X-API-Key": DATATOURISME_API_KEY
-    }
+    headers = {"X-API-Key": api_key}
 
     logger.info(f"Starting fetch operation (max_pages={max_pages}, page_size={page_size}, limit={limit_per_run})")
 
