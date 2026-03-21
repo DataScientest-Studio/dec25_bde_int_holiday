@@ -233,5 +233,5 @@ docker compose up -d --build
 
 ---
 
-*Last Updated: 18.03.2026*
+*Last Updated: 22.03.2026*
 
