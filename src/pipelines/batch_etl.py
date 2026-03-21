@@ -580,11 +580,11 @@ def fetch_pois_from_api(
     with exponential backoff.
 
     Args:
-    max_pages: Maximum number of pages to fetch
-    page_size: Number of items per page (max: 250)
-    limit_per_run: Maximum total POIs to fetch in this run
-    since_hours: Filter POIs updated in last N hours (if API supports)
-    rate_limiter: Rate limiter instance
+        max_pages: Maximum number of pages to fetch
+        page_size: Number of items per page (max: 250)
+        limit_per_run: Maximum total POIs to fetch in this run
+        since_hours: Filter POIs updated in last N hours (if API supports)
+        rate_limiter: Rate limiter instance
 
     Returns:
         List of raw POI dictionaries from the API
@@ -592,21 +592,23 @@ def fetch_pois_from_api(
     logger.info("=" * 60)
     logger.info("EXTRACTION STEP: Fetching POIs from DataTourisme API")
     logger.info("=" * 60)
-    
-    api_key = os.getenv("DATATOURISME_API_KEY", "")
 
-    if not DATATOURISME_API_KEY:
+    # Read API key at runtime (important for tests/CI where env vars may be set after import)
+    api_key = os.getenv("DATATOURISME_API_KEY", "")
+    if not api_key:
         raise ValueError("DATATOURISME_API_KEY not found. Please set it in your .env file.")
 
     if rate_limiter is None:
         rate_limiter = RateLimiter(MAX_REQUESTS_PER_SECOND, MAX_REQUESTS_PER_HOUR)
 
-    all_objects = []
+    all_objects: List[Dict[str, Any]] = []
     current_page = 1
 
     headers = {"X-API-Key": api_key}
 
-    logger.info(f"Starting fetch operation (max_pages={max_pages}, page_size={page_size}, limit={limit_per_run})")
+    logger.info(
+        f"Starting fetch operation (max_pages={max_pages}, page_size={page_size}, limit={limit_per_run})"
+    )
 
     while True:
         if max_pages and current_page > max_pages:
@@ -621,7 +623,7 @@ def fetch_pois_from_api(
             "page_size": min(page_size, 250),
             "page": current_page,
             "lang": "fr,en",
-            "fields": "uuid,label,type,uri,isLocatedAt,hasDescription,lastUpdate"
+            "fields": "uuid,label,type,uri,isLocatedAt,hasDescription,lastUpdate",
         }
 
         # Note: DataTourisme API may not support since_hours filtering directly
@@ -653,7 +655,9 @@ def fetch_pois_from_api(
             objects_to_add = objects[:remaining]
             all_objects.extend(objects_to_add)
 
-            logger.info(f"Page {current_page}: Fetched {len(objects_to_add)} objects (total: {len(all_objects)})")
+            logger.info(
+                f"Page {current_page}: Fetched {len(objects_to_add)} objects (total: {len(all_objects)})"
+            )
 
             if len(objects) < page_size:
                 logger.info("Reached last page (fewer objects than page_size)")
@@ -669,7 +673,6 @@ def fetch_pois_from_api(
     logger.info("=" * 60)
 
     return all_objects
-
 
 # ============================================================================
 # TRANSFORMATION STEP
