@@ -40,9 +40,8 @@ class KMeansAirportClusterer:
     """
     KMeans clustering (k clusters) over POI coordinates, then map each cluster to nearest airport.
 
-    This is a 2-step model:
-      1) ML: KMeans assigns points to 0..k-1
-      2) Post-processing: each cluster center is mapped to the nearest airport
+    1) KMeans assigns points to 0..k-1
+    2) Each cluster center is mapped to the nearest airport
     """
 
     def __init__(
@@ -80,7 +79,7 @@ class KMeansAirportClusterer:
                 continue
 
             coords.append([lat, lon])
-            aligned.append(p)
+            aligned.append({**p, "_lat": lat, "_lon": lon})
 
         if len(coords) < self.k:
             return {
@@ -121,7 +120,9 @@ class KMeansAirportClusterer:
                     "city": airport.city,
                     "lat": airport.lat,
                     "lon": airport.lon,
-                    "cluster_center_to_airport_km": float(haversine_km(c_lat, c_lon, airport.lat, airport.lon)),
+                    "cluster_center_to_airport_km": float(
+                        haversine_km(c_lat, c_lon, airport.lat, airport.lon)
+                    ),
                 },
                 "size": 0,
                 "pois": [],
@@ -136,8 +137,8 @@ class KMeansAirportClusterer:
                     "label": p.get("label") or p.get("name") or p.get("id") or "POI",
                     "name": p.get("name") or p.get("label") or p.get("id") or "POI",
                     "type": p.get("type", "unknown"),
-                    "latitude": float(p["latitude"]),
-                    "longitude": float(p["longitude"]),
+                    "latitude": float(p["_lat"]),
+                    "longitude": float(p["_lon"]),
                 }
             )
 

@@ -87,9 +87,11 @@ Use the navigation menu on the left to explore different sections:
 - **🔍 Data Quality** - Data completeness metrics
 - **🔎 POI Explorer** - Browse and search POIs
 - **🗺️ Map Explorer** - Interactive map visualization
-- **🗺️ Itinerary Builder** - AI-powered itinerary generation
-- **📅 Itinerary Analysis** - ML clustering and predictions
+- **🧩 Clustering** - KMeans airport clustering results
+- **📉 Elbow KMeans** - Auto-select k (elbow method)
 - **🕸️ Graph** - Neo4j graph database statistics
+- **📅 Itinerary Generator** - using greedy selection
+
 """)
 
 st.info("👈 Select a page from the sidebar to get started!")

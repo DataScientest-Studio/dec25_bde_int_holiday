@@ -14,6 +14,8 @@ from pydantic import BaseModel, Field
 from src.api.db import get_db
 from src.api.models import POI
 from src.api import kmeans_airport_endpoints
+
+
 from src.analytics.analytics import (
     get_poi_counts_by_category,
     get_recent_pois,
@@ -26,6 +28,7 @@ from src.analytics.analytics import (
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="POI API", description="API for accessing Point of Interest data")
+
 
 
 # Add CORS middleware to allow requests from Streamlit dashboard
