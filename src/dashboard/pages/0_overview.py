@@ -1,20 +1,22 @@
 """
 Overview page showing key statistics and KPIs.
 """
-import streamlit as st
-import requests
-import pandas as pd
-import os
+from __future__ import annotations
+
 import logging
+import os
+
+import pandas as pd
+import requests
+import streamlit as st
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# API base URL
-API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
-if os.getenv("DOCKER_ENV"):
-    API_BASE_URL = "http://api:8000"
+# API base URL (use the same convention across all pages)
+# In docker-compose set: API_URL=http://api:8000
+API_BASE_URL = os.getenv("API_URL") or os.getenv("API_BASE_URL") or "http://localhost:8000"
 
 st.set_page_config(page_title="Overview", layout="wide")
 st.title("📊 Overview - Key Performance Indicators")
@@ -22,14 +24,14 @@ st.title("📊 Overview - Key Performance Indicators")
 # Debug info
 with st.expander("🔧 Debug Info", expanded=False):
     st.write(f"**API Base URL:** {API_BASE_URL}")
-    st.write(f"**Docker Environment:** {os.getenv('DOCKER_ENV', 'Not set')}")
-    
+
     # Test API connection
     try:
-        test_response = requests.get(f"{API_BASE_URL}/", timeout=2)
+        test_response = requests.get(f"{API_BASE_URL}/health", timeout=3)
         st.success(f"✅ API is reachable (Status: {test_response.status_code})")
     except Exception as e:
         st.error(f"❌ API connection test failed: {str(e)}")
+
 
 def fetch_stats():
     """Fetch statistics from API."""
@@ -41,19 +43,23 @@ def fetch_stats():
         st.error(f"Error fetching stats: {str(e)}")
         return None
 
+
 with st.spinner("Loading statistics..."):
     stats = fetch_stats()
 
 if stats is None:
     st.warning("⚠️ No statistics data available.")
-    st.info(f"""
-    **Troubleshooting Steps:**
-    1. Check if API is running: Visit {API_BASE_URL}/docs
-    2. Check API health: Visit {API_BASE_URL}/health
-    3. Check browser console for CORS errors (F12 → Console)
-    4. Verify API_BASE_URL is correct: {API_BASE_URL}
-    5. Try manually calling: {API_BASE_URL}/stats in your browser
-    """)
+    st.info(
+        f"""
+**Troubleshooting Steps:**
+1. Check if API is running: Visit {API_BASE_URL}/docs
+2. Check API health: Visit {API_BASE_URL}/health
+3. Verify API URL env var:
+   - API_URL={os.getenv('API_URL')}
+   - API_BASE_URL={os.getenv('API_BASE_URL')}
+4. Try manually calling: {API_BASE_URL}/stats in your browser
+"""
+    )
     st.stop()
 
 # Display KPIs

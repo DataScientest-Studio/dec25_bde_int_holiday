@@ -15,17 +15,17 @@
 - Batch ETL from **DataTourisme API** → **PostgreSQL**
 - Graph projection into **Neo4j** using a graph loader
 - **FastAPI** service exposing POIs + stats + charts + graph summary + ETL run tracking/control
-- **Streamlit dashboard** for analytics, mapping, and itinerary generation
+- **Streamlit dashboard** for analytics, mapping, clustering and itinerary generation
 - **Scheduler (cron)** container for automation (hourly ETL + graph load)
-- **CI/CD** workflows (GitHub Actions) for lint/test/build/release
-- Documentation and diagrams (`docs/`), including `docs/uml.puml` and `docs/erd.puml`
+- **CI (GitHub Actions)** for lint/test/build checks (**no push/deploy**)
+- **CD (GitLab CI + Kubernetes)** for deployment orchestration
+- Documentation and diagrams (`docs/`), including `docs/uml.puml` and `docs/Holiday_itinerary_PostgreSQL_ERD.png`
 
-**Key outcomes (fill in):**
-- POIs ingested: **~____**
-- ETL runtime: **~____ min**
-- Neo4j nodes/relationships: **____ / ____**
-- Dashboard key features demonstrated: **(overview, charts, map, itinerary, graph stats, clustering)**
-
+**Key outcomes:**
+- POIs ingested (demo cap): **1000**
+- ETL runtime (demo run): **~10 min**
+- Neo4j nodes/relationships (demo run): **~1000 / ~3000**
+- Dashboard key features demonstrated: **overview, charts, map, itinerary, graph stats, clustering**
 ---
 
 ## 2. Problem Statement & Requirements
@@ -33,7 +33,7 @@
 ### 2.1 Problem Statement
 Tourism POIs are available through APIs but are difficult to use directly for analytics and itinerary generation because:
 - data is large and paginated
-- data quality varies (missing fields)/hard to implement a proper ML due to        inconsistent data and lack of historical data
+- data quality varies (missing fields)/hard to implement a proper ML due to inconsistent data and lack of historical data
 - users need both relational analysis (aggregations) and relationship navigation (graph)
 - a usable interface is needed for exploration and demo
 
@@ -123,11 +123,11 @@ Explaining our decisions:
   showing “recently updated POIs”
   building update timelines (charts)
   enabling incremental ETL logic (load changes since the last run)
-- Why text search index (if configured)
-  Why: geospatial visualizations (map pages, GeoJSON endpoint, itinerary logic, clustering) assume coordinates are valid. Bad coordinates can:
+- Why: geospatial visualizations (map pages, GeoJSON endpoint, itinerary logic, clustering) assume coordinates are valid. Bad coordinates can:
   break map rendering
   distort clustering results
   produce incorrect itineraries
+ 
 
 Benefits: consistency and availability
 
@@ -178,7 +178,7 @@ Explain:
 - Strong typing via Pydantic response models
 
 ### 7.2 Endpoint groups and rationale
-Describe what each group is for:
+What each group is for:
 
 - **Core POI endpoints**: `GET /pois`, `GET /pois/{id}`, `GET /pois/geojson`  
   *Why:* supports dashboard browsing, map layers, and external consumers.
@@ -192,12 +192,13 @@ Describe what each group is for:
 - **Graph endpoints**: `/graph/summary`, `/graph/sync`  
   *Why:* show graph health and (optionally) allow manual refresh.
 
-- **Clustering endpoints**: `/get/api/kmeans_airport`, `/fit` `/predict`  
-  *Why:* observability and operational readiness.
+- **Clustering endpoints**: `GET /api/kmeans-airport/fit`, `GET /api/kmeans-airport/predict`  
+  *Why:* clusters POIs in France with KMeans, maps clusters to nearest airports, and returns metadata used by the dashboard (including elbow/auto-k).
 
 **Evidence:**
 - `src/api/main.py`
 - `src/analytics/analytics.py`
+- `src/ml`
 
 ---
 
@@ -213,6 +214,7 @@ Document:
 - Overview KPIs
 - Charts (types, updates)
 - Map visualization
+- Clustering
 - Graph summary page
 - Itinerary generator UI
 
@@ -230,18 +232,20 @@ Document:
 
 ---
 
-## 9. ML Extension (If part of your defense)
+## 9. ML Extension 
 
-### 9.1 KMeans Airport Clustering
-- **What:** cluster POIs (France) and map each cluster to nearest airport
-- **Why:** demonstrates an applied ML/analytics feature on top of the engineered data layer
-- **How:** FastAPI exposes endpoints; Streamlit visualizes results on map
+### 9.1 KMeans Airport Clustering (with auto-k elbow)
+- **What:** cluster POIs in France using KMeans; map each cluster center to the nearest airport.
+- **Why:** demonstrates an applied ML/analytics feature built on top of the engineered data platform.
+- **Auto-k (elbow):** when `k=auto`, the API computes an elbow heuristic (inertia vs. k) and suggests a `k`. The dashboard visualizes this curve.
+- **How:** FastAPI exposes endpoints; Streamlit renders clusters on a map and plots the elbow curve.
 
 **Evidence:**
 - `src/api/kmeans_airport_endpoints.py`
-- `src/ml/*`
-- `src/dashboard/pages/6_clustering.py`
-
+- `src/ml/auto_k_elbow.py`
+- `src/ml/kmeans_airport_clusterer.py`
+- `src/dashboard/pages/*clustering*.py`
+- `src/dashboard/pages/*elbow*.py`
 ---
 
 ## 10. Deployment & Operations
@@ -261,32 +265,37 @@ Document:
 ## 11. CI/CD
 
 ### 11.1 Why CI/CD
-- Enforces consistent lint/test/build
-- Prevents regressions
-- Provides reliable release process
+- Enforces consistent lint/test/build checks
+- Prevents regressions during collaborative development
+- Provides a reproducible deployment path for the demo environment
 
-### 11.2 What runs in CI
-Describe (fill in based on your YAMLs):
-- Lint: flake8
-- Tests: pytest + coverage
-- Docker build verification
-- Release workflow actions
+### 11.2 CI (GitHub Actions — checks only)
+What runs in GitHub Actions:
+- Linting / static checks
+- Tests (pytest, when applicable)
+- Build verification (dependency installation and/or Docker build checks)
+
+**Note:** GitHub Actions does **not** push Docker images and does **not** deploy in the current scope.
 
 **Evidence:**
 - `.github/workflows/ci.yaml`
-- `.github/workflows/release.yaml`
 
+### 11.3 CD (GitLab CI + Kubernetes)
+- Automated deployment pipeline orchestrated by GitLab CI
+- Kubernetes manifests stored under `k8s/`
+
+**Evidence:**
+- `.gitlab-ci.yml`
+- `k8s/`
+- GitLab pipeline (example run): `https://gitlab.com/miulina-group/holiday_machine_project/-/pipelines/2386612813`
 ---
 
 ## 12. Testing Strategy
 
 ### 12.1 Current status
 - Summarize test coverage and what exists in `tests/`
-
-### 12.2 What should be added (recommended)
 - API tests for: `/health`, `/pois` (filters), `/stats`, `/graph/summary`, ML endpoints
-- Mocking strategy for DB and Neo4j
-- Contract tests for API responses (Pydantic schemas)
+
 
 ---
 
@@ -308,23 +317,31 @@ docker compose up -d --build
 4) Show itinerary generation  
 5) Show graph summary + Neo4j presence  
 6) Show ETL run tracking  
-7) (Optional) Show clustering page  
+7) Show clustering page  
 
 ---
 
-## 14. Limitations, Risks, and Next Steps
+## 14. Limitations, Conclusions and Future Work
+
 
 ### 14.1 Limitations
-- Data quality varies in source fields
-- Neo4j graph derived from Postgres; sync timing matters
-- Some endpoints/features may be demo-oriented vs production-hardened
 
-### 14.2 Next steps
-- Increase test coverage + add CI gates
-- Improve incremental ETL (since timestamp)
-- Add better observability (structured logs, metrics)
-- Harden graph sync endpoint and access control
-- Consider caching for expensive analytics endpoints
+- Source data quality is heterogeneous (missing coordinates/descriptions/types).
+- Neo4j is a derived view of PostgreSQL and requires synchronization.
+- Some analytics/ML features are demo-oriented and not production-optimized.
+
+### 14.2 Conclusions
+
+This project delivered an end-to-end data engineering platform for French tourism POIs, from ingestion to storage (PostgreSQL), graph projection (Neo4j), API exposure (FastAPI), and interactive analytics (Streamlit). The solution is reproducible via Docker Compose, observable through health/run-tracking endpoints, and deployable via Kubernetes (GitLab CI). The dashboard demonstrates key analytics workflows (KPIs, charts, map exploration) as well as an itinerary generator and a clustering extension for advanced exploration.
+
+
+### 14.3 Future Work
+
+- Improve incremental ETL by loading only POIs updated since the last successful run.
+- Add automated API and pipeline tests (contract tests for responses, DB/Neo4j mocking).
+- Add observability: structured logs, metrics, and tracing for ETL + API endpoints.
+- Optimize heavy analytics endpoints with caching and/or pre-aggregations.
+- Harden graph sync operations (permissions, idempotency guarantees, monitoring).
 
 ---
 
@@ -337,4 +354,4 @@ docker compose up -d --build
 - API: `src/api/main.py`, `src/analytics/analytics.py`
 - Dashboard: `src/dashboard/app.py`, `src/dashboard/pages/*`
 - CI/CD: `.github/workflows/ci.yaml`, `.github/workflows/release.yaml` or through Kubernetes using GitLab 
-https://gitlab.com/miulina-group/holiday_machine_project/-/pipelines/2386612813
+  https://gitlab.com/miulina-group/holiday_machine_project/-/pipelines/2386612813
