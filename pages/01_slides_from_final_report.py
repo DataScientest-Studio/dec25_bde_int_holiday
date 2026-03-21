@@ -17,7 +17,8 @@ SLIDES = [
     # 1) Executive Summary / Architecture overview
     "architecture.md",
     "ARCHITECTURE_DIAGRAM.md",
-    "architecture_kubernetes.png",
+    "architecture_kubernetes.png"
+    "architecture.png",
 
     # 5) Data modeling decisions
     "schema.md",

@@ -1,0 +1,25 @@
+Your scheduler does not automatically run ETL immediately on container start (it just starts cron).
+ETL runs when:
+cron hits its schedule (e.g. 0 * * * *), or
+you manually hit the FastAPI “run ETL” endpoint, or
+you manually run /app/run_etl.sh.
+
+1.Stop everything and delete volumes
+docker compose down -v
+
+2.Rebuild and restart all services 
+docker compose build --no-cache
+docker compose up -d
+
+3.Verify containers are up 
+docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+
+4.Trail the logs live 
+docker exec -it holiday_scheduler sh -lc "tail -f /var/log/cron.log"
+
+5.Check container time 
+docker exec -it holiday_scheduler sh -lc "date"
+
+6.In another terminal, check POI count
+docker exec -it holiday_postgres psql -U holiday -d holiday -c "SELECT COUNT(*) FROM poi;"
+

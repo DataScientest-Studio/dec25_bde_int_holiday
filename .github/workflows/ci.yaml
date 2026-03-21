@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: ['*']
 
+env:
+  DATATOURISME_API_KEY: ${{ secrets.DATATOURISME_API_KEY }}
+
 jobs:
   lint-and-test:
     name: Lint and Test
@@ -35,11 +38,15 @@ jobs:
         run: |
           pytest tests/ -v --cov=src --cov-report=xml --cov-report=html --cov-report=term
         env:
+          PYTHONPATH: ${{ github.workspace }}
           POSTGRES_HOST: localhost
           POSTGRES_PORT: 5432
           POSTGRES_DB: test_holiday
           POSTGRES_USER: test_user
           POSTGRES_PASSWORD: test_password
+         
+        DATATOURISME_API_KEY: ${{ secrets.DATATOURISME_API_KEY }} 
+
       
       - name: Upload coverage reports
         uses: codecov/codecov-action@v4

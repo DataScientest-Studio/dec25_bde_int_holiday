@@ -432,6 +432,51 @@ def extract_theme_from_uri(uri: str) -> Optional[str]:
         logger.debug(f"Error extracting theme from URI {uri}: {e}")
         return None
 
+def _mock_datatourisme_objects(limit: int = 3) -> List[Dict[str, Any]]:
+    """
+    Deterministic mock objects shaped like DataTourisme API 'objects'.
+    Must match expectations in tests/test_etl_pipeline_integration.py.
+    """
+    objects = [
+        {
+            "uuid": "test-poi-1",
+            "label": {"fr": "Test POI 1"},
+            "type": "schema:Place",
+            "uri": "https://data.datatourisme.fr/restaurant/test-poi-1",
+            "isLocatedAt": [{
+                "schema:address": [{"schema:postalCode": "75001", "schema:addressLocality": "Paris"}],
+                "schema:geo": {"schema:latitude": 48.8566, "schema:longitude": 2.3522},
+            }],
+            "hasDescription": [{"shortDescription": {"fr": "Test description 1"}}],
+            "lastUpdate": "2026-01-02T00:00:00Z",
+        },
+        {
+            "uuid": "test-poi-2",
+            "label": {"fr": "Test POI 2"},
+            "type": "schema:Place",
+            "uri": "https://data.datatourisme.fr/museum/test-poi-2",
+            "isLocatedAt": [{
+                "schema:address": [{"schema:postalCode": "13001", "schema:addressLocality": "Marseille"}],
+                "schema:geo": {"schema:latitude": 43.2965, "schema:longitude": 5.3698},
+            }],
+            "hasDescription": [{"shortDescription": {"fr": "Test description 2"}}],
+            "lastUpdate": "2026-01-03T00:00:00Z",
+        },
+        {
+            "uuid": "test-poi-3",
+            "label": {"fr": "Test POI 3"},
+            "type": "schema:Place",
+            "uri": "https://data.datatourisme.fr/heritage/test-poi-3",
+            "isLocatedAt": [{
+                "schema:address": [{"schema:postalCode": "69001", "schema:addressLocality": "Lyon"}],
+                "schema:geo": {"schema:latitude": 45.7640, "schema:longitude": 4.8357},
+            }],
+            "hasDescription": [{"shortDescription": {"fr": "Test description 3"}}],
+            "lastUpdate": "2026-01-04T00:00:00Z",
+        },
+    ]
+    return objects[: max(0, limit)]
+
 
 def extract_label(poi: Dict[str, Any]) -> Optional[str]:
     """Extract label from POI object."""
@@ -535,11 +580,11 @@ def fetch_pois_from_api(
     with exponential backoff.
 
     Args:
-        max_pages: Maximum number of pages to fetch
-        page_size: Number of items per page (max: 250)
-        limit_per_run: Maximum total POIs to fetch in this run
-        since_hours: Filter POIs updated in last N hours (if API supports)
-        rate_limiter: Rate limiter instance
+    max_pages: Maximum number of pages to fetch
+    page_size: Number of items per page (max: 250)
+    limit_per_run: Maximum total POIs to fetch in this run
+    since_hours: Filter POIs updated in last N hours (if API supports)
+    rate_limiter: Rate limiter instance
 
     Returns:
         List of raw POI dictionaries from the API
@@ -547,7 +592,7 @@ def fetch_pois_from_api(
     logger.info("=" * 60)
     logger.info("EXTRACTION STEP: Fetching POIs from DataTourisme API")
     logger.info("=" * 60)
-
+    
     if not DATATOURISME_API_KEY:
         raise ValueError("DATATOURISME_API_KEY not found. Please set it in your .env file.")
 
